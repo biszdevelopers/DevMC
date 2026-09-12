@@ -15,3 +15,9 @@ buildNumber.properties
 .project
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
+
+mc-local/
+development-runner/
+.idea/
+.idea
+*.iml
