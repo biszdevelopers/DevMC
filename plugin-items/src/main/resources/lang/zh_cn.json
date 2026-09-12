@@ -20,5 +20,6 @@
   "command.devenchant.empty_hand": "§c请手持要附魔的物品。",
   "command.devenchant.success": "§a已应用 %s %s。",
   "command.devenchant.permission_denied": "§c你没有权限使用此调试命令。",
-  "command.devenchant.failure": "§c附魔命令失败，请检查服务器日志。"
+  "command.devenchant.failure": "§c附魔命令失败，请检查服务器日志。",
+  "item.minecraft.wooden_sword.attack_times": "攻击次数：%s"
 }

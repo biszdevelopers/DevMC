@@ -35,6 +35,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
+@SuppressWarnings("deprecation")
 public final class ItemRegistry {
 
   private final Map<ItemId, DevItem> entries = new LinkedHashMap<
@@ -42,6 +43,14 @@ public final class ItemRegistry {
     DevItem
   >();
   private final Map<Plugin, List<ItemId>> owners = new IdentityHashMap<
+    Plugin,
+    List<ItemId>
+  >();
+  private final Map<ItemId, VanillaItem> generatedVanilla =
+    new LinkedHashMap<ItemId, VanillaItem>();
+  private final Map<ItemId, OverrideVanillaItem> vanillaDefinitions =
+    new LinkedHashMap<ItemId, OverrideVanillaItem>();
+  private final Map<Plugin, List<ItemId>> vanillaOwners = new IdentityHashMap<
     Plugin,
     List<ItemId>
   >();
@@ -62,13 +71,49 @@ public final class ItemRegistry {
       ) continue;
       ItemId id = ItemId.of("minecraft", material.getKey().getKey());
       if (!registered.add(id)) continue; // Hybrid servers may expose aliases with one Bukkit key.
-      this.registerInternal(null, new VanillaItem(material));
+      VanillaItem item = new VanillaItem(material);
+      this.generatedVanilla.put(id, item);
+      this.registerInternal(null, item);
     }
     this.vanillaRegistered = true;
   }
 
   public synchronized void register(Plugin owner, CustomItem item) {
     this.registerAll(owner, List.of(item));
+  }
+
+  /** Replaces one generated vanilla definition until its owning plugin unregisters. */
+  public synchronized void registerVanillaOverride(
+    Plugin owner,
+    OverrideVanillaItem override
+  ) {
+    Objects.requireNonNull(owner, "owner");
+    Objects.requireNonNull(override, "override");
+    if (!this.vanillaRegistered) {
+      throw new IllegalStateException(
+        "Vanilla items must be registered before vanilla overrides"
+      );
+    }
+    ItemId id = override.id();
+    VanillaItem generated = this.generatedVanilla.get(id);
+    if (generated == null) {
+      throw new IllegalArgumentException(
+        "Not a generated vanilla item: " + String.valueOf(id)
+      );
+    }
+    if (generated.material() != override.material()) {
+      throw new IllegalArgumentException(
+        "Vanilla override material does not match " + String.valueOf(id)
+      );
+    }
+    if (this.vanillaDefinitions.containsKey(id)) {
+      throw new IllegalArgumentException(
+        "Duplicate vanilla override: " + String.valueOf(id)
+      );
+    }
+    this.vanillaDefinitions.put(id, override);
+    this.entries.put(id, override);
+    this.vanillaOwners.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(id);
   }
 
   public synchronized void registerAll(
@@ -102,6 +147,14 @@ public final class ItemRegistry {
     if (ids != null) {
       ids.forEach(this.entries::remove);
     }
+    List<ItemId> vanillaIds = this.vanillaOwners.remove(owner);
+    if (vanillaIds != null) {
+      for (ItemId id : vanillaIds) {
+        this.vanillaDefinitions.remove(id);
+        VanillaItem generated = this.generatedVanilla.get(id);
+        if (generated != null) this.entries.put(id, generated);
+      }
+    }
   }
 
   public synchronized Optional<DevItem> get(ItemId id) {
@@ -114,14 +167,18 @@ public final class ItemRegistry {
 
   synchronized boolean hasTickingDefinitions() {
     return this.entries.values().stream().anyMatch(item ->
-      !item.vanilla() && (item.properties().handTicking() || item.properties().inventoryTicking())
+      item.behaviorsEnabled() &&
+      (item.properties().handTicking() || item.properties().inventoryTicking())
     );
   }
 
   public synchronized boolean hasVanillaOverrides(ItemId id) {
-    return !this.overrides.getOrDefault(id, List.of()).isEmpty();
+    return this.vanillaDefinitions.containsKey(id) ||
+      !this.overrides.getOrDefault(id, List.of()).isEmpty();
   }
 
+  /** @deprecated Prefer a class derived from OverrideVanillaItem. */
+  @Deprecated(forRemoval = false)
   public synchronized void addVanillaOverride(
     ItemId id,
     VanillaItemOverride override
@@ -132,7 +189,7 @@ public final class ItemRegistry {
         "Not a generated vanilla item: " + String.valueOf(id)
       );
     }
-    this.overrides.computeIfAbsent(id, ignored -> new ArrayList()).add(
+    this.overrides.computeIfAbsent(id, ignored -> new ArrayList<>()).add(
       Objects.requireNonNull(override, "override")
     );
   }
@@ -187,7 +244,7 @@ public final class ItemRegistry {
       );
     }
     if (owner != null) {
-      this.owners.computeIfAbsent(owner, ignored -> new ArrayList()).add(
+      this.owners.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(
         item.id()
       );
     }

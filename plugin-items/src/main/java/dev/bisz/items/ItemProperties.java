@@ -24,6 +24,7 @@ public final class ItemProperties {
   private final String category;
   private final boolean handTicking;
   private final boolean inventoryTicking;
+  private final boolean attackTriggering;
   private final Map<String, ItemMetadata> metadata;
 
   private ItemProperties(Builder builder) {
@@ -35,6 +36,7 @@ public final class ItemProperties {
     this.category = builder.category;
     this.handTicking = builder.handTicking;
     this.inventoryTicking = builder.inventoryTicking;
+    this.attackTriggering = builder.attackTriggering;
     this.metadata = Map.copyOf(builder.metadata);
   }
 
@@ -70,6 +72,9 @@ public final class ItemProperties {
 
   public boolean inventoryTicking() { return this.inventoryTicking; }
 
+  /** Whether this item's attack callback should run for accepted melee hits. */
+  public boolean attackTriggering() { return this.attackTriggering; }
+
   public Map<String, ItemMetadata> metadata() {
     return this.metadata;
   }
@@ -84,6 +89,7 @@ public final class ItemProperties {
     private String category = "";
     private boolean handTicking;
     private boolean inventoryTicking;
+    private boolean attackTriggering;
     private final Map<String, ItemMetadata> metadata = new LinkedHashMap<
       String,
       ItemMetadata
@@ -127,15 +133,21 @@ public final class ItemProperties {
       return this;
     }
 
-    /** Enables the CustomItem hand-tick callback for stacks in either hand. */
+    /** Enables the DevItem hand-tick callback for behavior-capable definitions. */
     public Builder handTicking(boolean value) {
       this.handTicking = value;
       return this;
     }
 
-    /** Enables the CustomItem inventory-tick callback for non-hand player slots. */
+    /** Enables the DevItem inventory-tick callback for non-hand player slots. */
     public Builder inventoryTicking(boolean value) {
       this.inventoryTicking = value;
+      return this;
+    }
+
+    /** Enables the DevItem attack callback for accepted direct melee hits. */
+    public Builder attackTriggering(boolean value) {
+      this.attackTriggering = value;
       return this;
     }
 

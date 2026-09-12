@@ -30,7 +30,8 @@ public final class DevItemStack {
   static final String UNIQUE_KEY = "unique-id";
   static final String CUSTOM_NAME_KEY = "custom-name";
   static final String LANGUAGE_KEY = "lang";
-  static final String ENCHANTMENT_SIGNATURE_KEY = "enchantment-signature";
+  static final String RENDER_SIGNATURE_KEY = "render-signature";
+  static final String LEGACY_ENCHANTMENT_SIGNATURE_KEY = "enchantment-signature";
   static final String CUSTOM_ENCHANTMENTS_KEY = "custom-enchantments";
   static final String ENCHANTMENT_METADATA_KEY = "enchantment-metadata";
   static final String META_PREFIX = "meta/";
@@ -63,6 +64,7 @@ public final class DevItemStack {
     edit(container -> {
       if (value == null || value.isBlank()) container.remove(key(CUSTOM_NAME_KEY));
       else container.set(key(CUSTOM_NAME_KEY), PersistentDataType.STRING, value);
+      clearRenderSignature(container);
     });
   }
   public Optional<Object> metadata(String name) {
@@ -73,7 +75,10 @@ public final class DevItemStack {
     ItemMetadata declared = definition.properties().metadata().get(name);
     if (declared == null) throw new IllegalArgumentException("Undeclared metadata: " + name);
     if (!ItemMetadata.matches(declared.type(), value)) throw new IllegalArgumentException("Metadata type mismatch: " + name);
-    edit(container -> set(container, META_PREFIX + name, declared.type(), value));
+    edit(container -> {
+      set(container, META_PREFIX + name, declared.type(), value);
+      clearRenderSignature(container);
+    });
   }
   public Optional<UUID> uniqueId() { return read(UNIQUE_KEY, ItemDataType.STRING).map(value -> UUID.fromString((String) value)); }
   public boolean sameItem(DevItemStack other) { return uniqueId().map(id -> other.uniqueId().map(id::equals).orElse(false)).orElseGet(() -> bukkit.isSimilar(other.bukkit)); }
@@ -115,7 +120,7 @@ public final class DevItemStack {
     values.put(key, value);
     all.put(id, values);
     writeEnchantmentMetadata(all);
-    invalidateEnchantmentRender();
+    invalidateRender();
   }
 
   /** Removes one metadata value and returns whether it existed. */
@@ -126,7 +131,7 @@ public final class DevItemStack {
     if (values.remove(Objects.requireNonNull(key, "key")) == null) return false;
     if (values.isEmpty()) all.remove(id); else all.put(id, values);
     writeEnchantmentMetadata(all);
-    invalidateEnchantmentRender();
+    invalidateRender();
     return true;
   }
 
@@ -137,10 +142,10 @@ public final class DevItemStack {
       VanillaEnchantment vanilla = (VanillaEnchantment) enchantment;
       ItemMeta meta = requiredMeta();
       if (meta instanceof EnchantmentStorageMeta book) book.addStoredEnchant(vanilla.bukkit(), level, true); else meta.addEnchant(vanilla.bukkit(), level, true);
-      bukkit.setItemMeta(meta); invalidateEnchantmentRender();
+      bukkit.setItemMeta(meta); invalidateRender();
       return;
     }
-    Map<EnchantmentId, Integer> entries = customEnchantmentLevels(); entries.put(enchantment.id(), level); writeCustomEnchantmentLevels(entries); invalidateEnchantmentRender();
+    Map<EnchantmentId, Integer> entries = customEnchantmentLevels(); entries.put(enchantment.id(), level); writeCustomEnchantmentLevels(entries); invalidateRender();
   }
 
   /** Adds or replaces an enchantment and atomically replaces its metadata. */
@@ -155,7 +160,7 @@ public final class DevItemStack {
     if (metadata.isEmpty()) all.remove(enchantment.id());
     else all.put(enchantment.id(), new LinkedHashMap<>(metadata));
     writeEnchantmentMetadata(all);
-    invalidateEnchantmentRender();
+    invalidateRender();
   }
   public boolean removeEnchantment(DevEnchantment enchantment) {
     Objects.requireNonNull(enchantment, "enchantment");
@@ -173,7 +178,7 @@ public final class DevItemStack {
       Map<EnchantmentId, Map<NamespacedKey, Object>> metadata = mutableMetadata();
       metadata.remove(enchantment.id());
       writeEnchantmentMetadata(metadata);
-      invalidateEnchantmentRender();
+      invalidateRender();
     }
     return removed;
   }
@@ -198,7 +203,7 @@ public final class DevItemStack {
     String encoded = source.readCustomPayload();
     edit(container -> { if (encoded == null) container.remove(key(CUSTOM_ENCHANTMENTS_KEY)); else container.set(key(CUSTOM_ENCHANTMENTS_KEY), PersistentDataType.STRING, encoded); });
     writeEnchantmentMetadata(metadata);
-    invalidateEnchantmentRender();
+    invalidateRender();
   }
 
   /** Applies ItemLib's intersection-based metadata rules to an anvil result. */
@@ -214,7 +219,7 @@ public final class DevItemStack {
       if (!values.isEmpty()) merged.put(id, values);
     }
     writeEnchantmentMetadata(merged);
-    invalidateEnchantmentRender();
+    invalidateRender();
   }
 
   static Map<NamespacedKey, Object> mergeMetadataValues(
@@ -235,7 +240,7 @@ public final class DevItemStack {
 
   void clearEnchantmentMetadata() {
     writeEnchantmentMetadata(Map.of());
-    invalidateEnchantmentRender();
+    invalidateRender();
   }
   /** Preserves custom-item identity through Bukkit operations that rebuild ItemMeta. */
   public void copyItemIdentityFrom(DevItemStack source) {
@@ -248,15 +253,15 @@ public final class DevItemStack {
   }
 
   public void render(Player viewer) {
-    if (viewer == null) { edit(container -> { container.remove(key(LANGUAGE_KEY)); container.remove(key(ENCHANTMENT_SIGNATURE_KEY)); }); return; }
+    if (viewer == null) { edit(container -> { container.remove(key(LANGUAGE_KEY)); clearRenderSignature(container); }); return; }
     definition.render(this, viewer);
   }
   public Optional<String> renderedLanguage() { return read(LANGUAGE_KEY, ItemDataType.STRING).map(String.class::cast); }
   public boolean isRenderedFor(Player viewer) {
     if (viewer == null) return false;
-    String language = ItemTranslations.language(viewer); String signature = enchantmentSignature();
+    String language = ItemTranslations.language(viewer); String signature = renderSignature();
     return renderedLanguage().map(ItemTranslations::normalize).filter(language::equals).isPresent()
-      && read(ENCHANTMENT_SIGNATURE_KEY, ItemDataType.STRING).map(String.class::cast).filter(signature::equals).isPresent();
+      && read(RENDER_SIGNATURE_KEY, ItemDataType.STRING).map(String.class::cast).filter(signature::equals).isPresent();
   }
   public void appendRuntimeLore(String line) { runtimeLore.add(Objects.requireNonNull(line, "line")); }
 
@@ -303,7 +308,8 @@ public final class DevItemStack {
     if (!extraLore.isEmpty() || !runtimeLore.isEmpty()) { lore.add(" "); lore.addAll(extraLore); lore.addAll(runtimeLore); }
     meta.setLore(lore);
     meta.getPersistentDataContainer().set(key(LANGUAGE_KEY), PersistentDataType.STRING, ItemTranslations.normalize(language));
-    meta.getPersistentDataContainer().set(key(ENCHANTMENT_SIGNATURE_KEY), PersistentDataType.STRING, enchantmentSignature());
+    meta.getPersistentDataContainer().remove(key(LEGACY_ENCHANTMENT_SIGNATURE_KEY));
+    meta.getPersistentDataContainer().set(key(RENDER_SIGNATURE_KEY), PersistentDataType.STRING, renderSignature());
     bukkit.setItemMeta(meta);
   }
 
@@ -328,14 +334,39 @@ public final class DevItemStack {
     });
     return result.toString();
   }
+
+  private String renderSignature() {
+    StringBuilder result = new StringBuilder("v3|definition=")
+      .append(definition.getClass().getName());
+    customName().ifPresent(value -> result
+      .append("|name=")
+      .append(value.length())
+      .append(':')
+      .append(value));
+    definition.properties().metadata().entrySet().stream()
+      .sorted(Map.Entry.comparingByKey())
+      .forEach(entry -> metadata(entry.getKey()).ifPresent(value -> result
+        .append("|metadata=")
+        .append(entry.getKey())
+        .append(':')
+        .append(value.getClass().getSimpleName())
+        .append(':')
+        .append(value)));
+    return result.append("|enchantments=").append(enchantmentSignature()).toString();
+  }
   private Map<EnchantmentId, Integer> customEnchantmentLevels() { return decodeCustomEnchantments(readCustomPayload()); }
   private String readCustomPayload() { ItemMeta meta = bukkit.getItemMeta(); return meta == null ? null : meta.getPersistentDataContainer().get(key(CUSTOM_ENCHANTMENTS_KEY), PersistentDataType.STRING); }
   private void writeCustomEnchantmentLevels(Map<EnchantmentId, Integer> entries) {
     String encoded = encodeCustomEnchantments(entries);
     edit(container -> { if (encoded == null) container.remove(key(CUSTOM_ENCHANTMENTS_KEY)); else container.set(key(CUSTOM_ENCHANTMENTS_KEY), PersistentDataType.STRING, encoded); });
   }
-  private void invalidateEnchantmentRender() {
-    edit(container -> container.remove(key(ENCHANTMENT_SIGNATURE_KEY)));
+  private void invalidateRender() {
+    edit(DevItemStack::clearRenderSignature);
+  }
+
+  private static void clearRenderSignature(PersistentDataContainer container) {
+    container.remove(key(RENDER_SIGNATURE_KEY));
+    container.remove(key(LEGACY_ENCHANTMENT_SIGNATURE_KEY));
   }
 
   private EnchantmentId requireApplied(DevEnchantment enchantment) {

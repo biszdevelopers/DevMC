@@ -20,5 +20,6 @@
   "command.devenchant.empty_hand": "§cHold an item to enchant.",
   "command.devenchant.success": "§aApplied %s %s.",
   "command.devenchant.permission_denied": "§cYou do not have permission to use this debug command.",
-  "command.devenchant.failure": "§cThe enchantment command failed. Check the server log."
+  "command.devenchant.failure": "§cThe enchantment command failed. Check the server log.",
+  "item.minecraft.wooden_sword.attack_times": "Attack Times: %s"
 }

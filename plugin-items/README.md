@@ -24,6 +24,27 @@ Resolve an existing stack through `ItemFactory.wrap`. Custom PDC identity has pr
 
 Override `createBaseStack(int)` when an item needs Bukkit-supported potion, model, or other base metadata. Override `renderName`, `renderLore`, `onCreated`, and `onLoaded` for per-item behavior. Rendering uses Bundler's locale service when a matching translation exists and safely falls back to the item ID otherwise.
 
+Class-based vanilla overrides keep Minecraft's native item identity while exposing the same metadata and behavior hooks as a custom item. Register one directly after Items has loaded its vanilla catalog:
+
+```java
+public final class StoneSwordOverride extends OverrideVanillaItem {
+    public StoneSwordOverride() {
+        super(Material.STONE_SWORD, ItemProperties.builder(Material.STONE_SWORD)
+                .metadata("origin", ItemDataType.STRING, "Ancient quarry")
+                .build());
+    }
+
+    @Override
+    protected List<String> renderLore(DevItemStack stack, Player viewer) {
+        return List.of("§7" + stack.metadata("origin").orElse(""));
+    }
+}
+
+ItemsPlugin.instance().registry().registerVanillaOverride(plugin, new StoneSwordOverride());
+```
+
+Only one class override may own a material at a time, and `unregisterAll(plugin)` restores its generated vanilla definition. Existing `VanillaItemOverride` callbacks remain available as a deprecated compatibility API. Items includes a registered `WoodenSwordOverride` example whose `attack_times` metadata and lore increment after each accepted direct melee hit.
+
 ## Enchantments
 
 Vanilla Bukkit enchantments are registered as `VanillaEnchantment` definitions during Items startup and continue to be executed by Minecraft. Plugins can register a `CustomEnchantment` through `DeferredEnchantmentRegister`; custom levels are stored in ItemLib PDC data while vanilla levels remain in Minecraft's normal tags.

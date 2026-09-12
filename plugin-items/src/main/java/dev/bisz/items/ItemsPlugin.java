@@ -39,6 +39,7 @@ public final class ItemsPlugin extends JavaPlugin {
   public void onLoad() {
     instance = this;
     this.registry.registerVanillaItems();
+    this.registry.registerVanillaOverride(this, new WoodenSwordOverride());
     this.enchantments.registerVanillaEnchantments();
     this.enchantments.register(this, new RainbowEnchantment());
   }

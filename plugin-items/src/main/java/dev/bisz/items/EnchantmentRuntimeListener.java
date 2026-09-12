@@ -44,7 +44,7 @@ final class EnchantmentRuntimeListener implements Listener {
     ItemStack item = player.getInventory().getItem(slot); if (item == null || item.getType().isAir()) return;
     try {
       DevItemStack stack = factory.wrap(item);
-      if (!stack.definition().vanilla() && stack.definition().properties().handTicking()) stack.definition().handTick(stack, player, hand);
+      if (stack.definition().behaviorsEnabled() && stack.definition().properties().handTicking()) stack.definition().handTick(stack, player, hand);
       for (Map.Entry<DevEnchantment, Integer> entry : stack.enchantments().entrySet()) {
         DevEnchantment enchantment = entry.getKey();
         if (!enchantment.vanilla() && enchantment.properties().handTicking()) enchantment.handTick(stack, entry.getValue(), player, hand);
@@ -56,7 +56,7 @@ final class EnchantmentRuntimeListener implements Listener {
     ItemStack item = player.getInventory().getItem(slot); if (item == null || item.getType().isAir()) return;
     try {
       DevItemStack stack = factory.wrap(item);
-      if (!stack.definition().vanilla() && stack.definition().properties().inventoryTicking()) stack.definition().inventoryTick(stack, player, slot);
+      if (stack.definition().behaviorsEnabled() && stack.definition().properties().inventoryTicking()) stack.definition().inventoryTick(stack, player, slot);
       for (Map.Entry<DevEnchantment, Integer> entry : stack.enchantments().entrySet()) {
         DevEnchantment enchantment = entry.getKey();
         if (!enchantment.vanilla() && enchantment.properties().inventoryTicking()) enchantment.inventoryTick(stack, entry.getValue(), player, slot);
@@ -72,6 +72,26 @@ final class EnchantmentRuntimeListener implements Listener {
     else if (event.getDamager() instanceof Projectile shot && shot.getShooter() instanceof Player player) { holder = player; source = projectileSources.get(shot.getUniqueId()); }
     if (holder == null || source == null || source.getType().isAir()) return;
     applyDamage(event, holder, event.getEntity(), source, false, projectile);
+  }
+
+  @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+  void itemAttack(EntityDamageByEntityEvent event) {
+    if (!(event.getDamager() instanceof Player attacker)) return;
+    ItemStack item = attacker.getInventory().getItemInMainHand();
+    if (item == null || item.getType().isAir()) return;
+    try {
+      DevItemStack stack = factory.wrap(item);
+      DevItem definition = stack.definition();
+      if (
+        !definition.behaviorsEnabled() ||
+        !definition.properties().attackTriggering()
+      ) return;
+      definition.attack(stack, attacker, event.getEntity(), event);
+      stack.render(attacker);
+      attacker.getInventory().setItemInMainHand(stack.bukkitStack());
+    } catch (RuntimeException exception) {
+      log("item attack", exception);
+    }
   }
   @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
   void incomingDamage(EntityDamageEvent event) {

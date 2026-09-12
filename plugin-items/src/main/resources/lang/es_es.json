@@ -20,5 +20,6 @@
   "command.devenchant.empty_hand": "§cSostén un objeto para encantar.",
   "command.devenchant.success": "§aSe aplicó %s %s.",
   "command.devenchant.permission_denied": "§cNo tienes permiso para usar este comando de depuración.",
-  "command.devenchant.failure": "§cEl comando de encantamiento falló. Revisa el registro del servidor."
+  "command.devenchant.failure": "§cEl comando de encantamiento falló. Revisa el registro del servidor.",
+  "item.minecraft.wooden_sword.attack_times": "Ataques: %s"
 }

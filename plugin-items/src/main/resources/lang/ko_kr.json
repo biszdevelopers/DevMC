@@ -20,5 +20,6 @@
   "command.devenchant.empty_hand": "§c인챈트할 아이템을 손에 들어야 합니다.",
   "command.devenchant.success": "§a%s %s 적용됨.",
   "command.devenchant.permission_denied": "§c이 디버그 명령어를 사용할 권한이 없습니다.",
-  "command.devenchant.failure": "§c인챈트 명령에 실패했습니다. 서버 로그를 확인하세요."
+  "command.devenchant.failure": "§c인챈트 명령에 실패했습니다. 서버 로그를 확인하세요.",
+  "item.minecraft.wooden_sword.attack_times": "공격 횟수: %s"
 }

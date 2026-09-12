@@ -15,7 +15,9 @@ import dev.bisz.items.ItemTranslations;
 import java.util.List;
 import java.util.Objects;
 import org.bukkit.Material;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
@@ -70,14 +72,25 @@ public abstract class DevItem {
 
   protected void onLoaded(DevItemStack stack) {}
 
-  /** Called only when ItemProperties.handTicking is enabled for a custom item. */
+  /** Called only when ItemProperties.handTicking is enabled for this definition. */
   protected void onHandTick(DevItemStack stack, Player holder, EquipmentSlot hand) {}
 
-  /** Called only when ItemProperties.inventoryTicking is enabled for a custom item. */
+  /** Called only when ItemProperties.inventoryTicking is enabled for this definition. */
   protected void onInventoryTick(DevItemStack stack, Player holder, int slot) {}
 
   /** Called once after Bukkit accepts consumption of this item. */
   protected void onConsumed(DevItemStack stack, Player consumer) {}
+
+  /**
+   * Called for an accepted direct melee hit when ItemProperties.attackTriggering is enabled.
+   * The event is at MONITOR priority and must be treated as read-only.
+   */
+  protected void onAttack(
+    DevItemStack stack,
+    Player attacker,
+    Entity target,
+    EntityDamageByEntityEvent event
+  ) {}
 
   protected List<String> renderLore(DevItemStack stack, Player viewer) {
     return List.of();
@@ -101,6 +114,19 @@ public abstract class DevItem {
 
   final void inventoryTick(DevItemStack stack, Player holder, int slot) {
     this.onInventoryTick(stack, holder, slot);
+  }
+
+  final void attack(
+    DevItemStack stack,
+    Player attacker,
+    Entity target,
+    EntityDamageByEntityEvent event
+  ) {
+    this.onAttack(stack, attacker, target, event);
+  }
+
+  final boolean behaviorsEnabled() {
+    return !this.vanilla() || this instanceof OverrideVanillaItem;
   }
 
   final void render(DevItemStack stack, Player viewer) {

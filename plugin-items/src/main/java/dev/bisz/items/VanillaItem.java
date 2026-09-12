@@ -11,19 +11,28 @@ import dev.bisz.items.ItemId;
 import dev.bisz.items.ItemProperties;
 import org.bukkit.Material;
 
-public final class VanillaItem extends DevItem {
+public class VanillaItem extends DevItem {
 
   public VanillaItem(Material material) {
-    super(
-      ItemId.of("minecraft", material.getKey().getKey()),
+    this(
+      material,
       ItemProperties.builder(material)
         .quality(material == Material.ENCHANTED_BOOK ? Quality.RARE : Quality.COMMON)
         .build()
     );
   }
 
+  protected VanillaItem(Material material, ItemProperties properties) {
+    super(ItemId.of("minecraft", material.getKey().getKey()), properties);
+    if (properties.material() != material) {
+      throw new IllegalArgumentException(
+        "Vanilla item properties must use " + material
+      );
+    }
+  }
+
   @Override
-  public boolean vanilla() {
+  public final boolean vanilla() {
     return true;
   }
 }

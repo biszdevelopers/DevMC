@@ -20,5 +20,6 @@
   "command.devenchant.empty_hand": "§cエンチャントするアイテムを手に持ってください。",
   "command.devenchant.success": "§a%s %s を適用しました。",
   "command.devenchant.permission_denied": "§cこのデバッグコマンドを使用する権限がありません。",
-  "command.devenchant.failure": "§cエンチャントコマンドが失敗しました。サーバーログを確認してください。"
+  "command.devenchant.failure": "§cエンチャントコマンドが失敗しました。サーバーログを確認してください。",
+  "item.minecraft.wooden_sword.attack_times": "攻撃回数: %s"
 }
