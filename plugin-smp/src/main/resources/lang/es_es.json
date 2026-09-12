@@ -1,0 +1,8 @@
+{
+  "daily.nits.message": "§a¡Has recibido §e%s Nits§a como recompensa diaria!",
+  "command.forcedailynits.usage": "§cUso: /forcedailynits [jugador]",
+  "command.forcedailynits.player_not_found": "§cNo se encontró al jugador. La consola debe especificar un jugador conectado.",
+  "command.forcedailynits.success": "§aSe forzó la recompensa diaria de Nits para %s.",
+  "command.forcedailynits.permission_denied": "§cNo tienes permiso para usar este comando de depuración.",
+  "command.forcedailynits.failure": "§cEl comando de depuración de Nits diarios falló. Revisa el registro del servidor."
+}

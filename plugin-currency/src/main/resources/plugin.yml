@@ -1,0 +1,14 @@
+name: Currency
+version: 1.0.0-SNAPSHOT
+main: dev.bisz.currency.CurrencyPlugin
+api-version: "1.20"
+authors: [BisZ]
+depend: [Bundler]
+
+permissions:
+  currency.nits.debug:
+    description: Allows the administrator-only /nits debug command.
+    default: op
+  currency.archive.debug:
+    description: Allows manual currency transaction-cache archival.
+    default: op

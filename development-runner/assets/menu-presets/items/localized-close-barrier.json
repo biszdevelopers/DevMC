@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "item",
+  "id": "22222222-2222-4222-8222-222222222222",
+  "name": "Localized Close Barrier",
+  "item": {
+    "material": "BARRIER",
+    "amount": 1,
+    "name": {
+      "mode": "localized",
+      "value": "locale.menu.close"
+    },
+    "lore": [],
+    "wrap": "none",
+    "wrapWidth": 30,
+    "clickAction": "context.session().close();"
+  }
+}

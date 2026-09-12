@@ -1,0 +1,8 @@
+{
+  "daily.nits.message": "§aYou received §e%s Nits§a as your daily reward!",
+  "command.forcedailynits.usage": "§cUsage: /forcedailynits [player]",
+  "command.forcedailynits.player_not_found": "§cPlayer not found. Console senders must specify an online player.",
+  "command.forcedailynits.success": "§aForced the daily nits reward for %s.",
+  "command.forcedailynits.permission_denied": "§cYou do not have permission to use this debug command.",
+  "command.forcedailynits.failure": "§cThe daily-nits debug command failed. Check the server log."
+}

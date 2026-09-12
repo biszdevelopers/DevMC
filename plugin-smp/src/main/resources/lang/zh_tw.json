@@ -1,0 +1,8 @@
+{
+  "daily.nits.message": "§a你獲得了每日獎勵：§e%s Nits§a！",
+  "command.forcedailynits.usage": "§c用法：/forcedailynits [玩家]",
+  "command.forcedailynits.player_not_found": "§c找不到玩家。從主控台執行時必須指定一名線上玩家。",
+  "command.forcedailynits.success": "§a已為 %s 強制發放每日 Nits 獎勵。",
+  "command.forcedailynits.permission_denied": "§c你沒有權限使用此除錯指令。",
+  "command.forcedailynits.failure": "§c每日 Nits 除錯指令執行失敗，請檢查伺服器日誌。"
+}

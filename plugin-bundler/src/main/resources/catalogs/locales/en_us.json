@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "language": "en_us",
+  "translations": {
+    "bundler.authentication.unconfigured": "Authentication is enabled but no gateway is configured.",
+    "bundler.catalog.reload.success": "Static data has been reloaded.",
+    "bundler.catalog.reload.failure": "Static data reload failed: %s"
+  }
+}

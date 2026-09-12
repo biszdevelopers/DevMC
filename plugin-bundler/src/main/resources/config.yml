@@ -1,0 +1,14 @@
+storage:
+  directory: "D:/ServerData"
+modules:
+  profiles: true
+  ranks: true
+  locales: true
+  authentication: false
+  moderation: false
+  menus: true
+  tablist: false
+  server-health: false
+  npc: true
+authentication:
+  timeout-millis: 5000

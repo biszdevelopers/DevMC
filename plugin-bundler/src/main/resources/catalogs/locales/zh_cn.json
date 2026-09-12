@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "language": "zh_cn",
+  "translations": {
+    "bundler.authentication.unconfigured": "认证模块尚未配置，暂时无法登录。",
+    "bundler.catalog.reload.success": "静态数据已重新加载。",
+    "bundler.catalog.reload.failure": "静态数据重新加载失败：%s"
+  }
+}

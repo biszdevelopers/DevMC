@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../CS Projects" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../CS Projects/classworks" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../Modding/BallisticsTACZ" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../Modding/chronology" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/mc-local" vcs="Git" />
+  </component>
+</project>

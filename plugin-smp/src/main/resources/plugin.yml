@@ -1,0 +1,10 @@
+name: SMP
+version: 1.0.0-SNAPSHOT
+main: dev.bisz.smp.Main
+api-version: "1.20"
+authors: [BisZ]
+depend: [Bundler, Currency, combat]
+permissions:
+  smp.debug:
+    description: Allows SMP debug commands.
+    default: op

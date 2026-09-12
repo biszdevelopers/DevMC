@@ -1,0 +1,8 @@
+{
+  "daily.nits.message": "§a일일 보상으로 §e%s Nits§a를 받았습니다!",
+  "command.forcedailynits.usage": "§c사용법: /forcedailynits [플레이어]",
+  "command.forcedailynits.player_not_found": "§c플레이어를 찾을 수 없습니다. 콘솔에서는 온라인 플레이어를 지정해야 합니다.",
+  "command.forcedailynits.success": "§a%s에게 일일 Nits 보상을 강제로 지급했습니다.",
+  "command.forcedailynits.permission_denied": "§c이 디버그 명령어를 사용할 권한이 없습니다.",
+  "command.forcedailynits.failure": "§c일일 Nits 디버그 명령어에 실패했습니다. 서버 로그를 확인하세요."
+}

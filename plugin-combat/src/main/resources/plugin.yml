@@ -1,0 +1,9 @@
+﻿name: "combat"
+version: "1.0.0"
+main: dev.bisz.combat.CombatPlugin
+api-version: "1.20"
+authors: ["Relizc"]
+depend: [Bundler, Currency, Items, Citizens]
+permissions:
+  combat.stash.admin:
+    default: op

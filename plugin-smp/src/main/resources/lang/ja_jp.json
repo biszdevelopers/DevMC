@@ -1,0 +1,8 @@
+{
+  "daily.nits.message": "§aデイリー報酬として§e%s Nits§aを受け取りました！",
+  "command.forcedailynits.usage": "§c使用法: /forcedailynits [プレイヤー]",
+  "command.forcedailynits.player_not_found": "§cプレイヤーが見つかりません。コンソールからはオンラインのプレイヤーを指定してください。",
+  "command.forcedailynits.success": "§a%sにデイリーNits報酬を強制付与しました。",
+  "command.forcedailynits.permission_denied": "§cこのデバッグコマンドを使用する権限がありません。",
+  "command.forcedailynits.failure": "§cデイリーNitsのデバッグコマンドに失敗しました。サーバーログを確認してください。"
+}

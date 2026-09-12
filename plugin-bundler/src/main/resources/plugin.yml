@@ -1,0 +1,16 @@
+name: Bundler
+version: 2.0.0-SNAPSHOT
+main: dev.bisz.bundler.BundlerPlugin
+api-version: "1.20"
+authors: [BisZ]
+softdepend: [ProtocolLib, Citizens]
+commands:
+  bundler:
+    description: Bundler administration command.
+    usage: /bundler <status|reload>
+    permission: bundler.admin
+permissions:
+  bundler.admin:
+    default: op
+  bundler.stash.admin:
+    default: op

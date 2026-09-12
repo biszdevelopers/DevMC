@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/plugin-bundler/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-bundler/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-combat/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-combat/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-currency/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-currency/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-enchants/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-enchants/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-items/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-items/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-smp/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/plugin-smp/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-bundler/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-bundler/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-currency/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-currency/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-items/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-items/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-smp/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/../plugin-smp/src/main/resources" charset="UTF-8" />
+  </component>
+</project>
