@@ -20,11 +20,9 @@ public final class WingedEnchantment extends EnchantsEnchantment {
 
   public WingedEnchantment() { super("winged"); }
   @Override protected String fallbackDescription(int level) {
-    return "Reduces fall damage by %d%%, grants one double jump while airborne, and prevents fall damage during its cooldown.";
+    return "Halves fall damage, grants one double jump while airborne, and prevents fall damage during its cooldown.";
   }
-  @Override protected Object[] descriptionArguments(int level) { return new Object[] { level * 12 }; }
   @Override protected double modifyIncomingDamage(EnchantmentDamageContext context, double damage) {
-    return context.event().getCause() == EntityDamageEvent.DamageCause.FALL
-      ? damage * Math.max(0D, 1D - .12D * context.level()) : damage;
+    return context.event().getCause() == EntityDamageEvent.DamageCause.FALL ? damage * .5D : damage;
   }
 }

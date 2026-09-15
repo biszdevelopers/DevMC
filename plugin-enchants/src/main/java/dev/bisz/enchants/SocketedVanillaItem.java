@@ -283,6 +283,7 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
   Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> normalize(DevItemStack stack) {
     Objects.requireNonNull(stack, "stack");
     ensureMendingMetadata(stack);
+    adoptVanillaEnchantments(stack);
     List<Map.Entry<DevEnchantment, EnchantmentData>> stored = readSocketEntries(stack);
     if (stored != null) return normalizeEntries(stack, stored);
     ArrayList<Map.Entry<DevEnchantment, EnchantmentData>> ranked = new ArrayList<>(stack.enchantmentData().entrySet());
@@ -328,9 +329,46 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
     Map<Integer, ?> assigned = normalize(stack);
     return sockets.stream().filter(slot -> !assigned.containsKey(slot.index())).toList();
   }
+
+  /** Removes every socketed enchantment and clears the serialized socket list. */
+  void stripAll(DevItemStack stack, Player viewer) {
+    for (DevEnchantment enchantment : new ArrayList<>(stack.enchantmentData().keySet())) {
+      if (EnchantmentCatalog.offered(enchantment)) stack.removeEnchantment(enchantment);
+    }
+    ItemMeta meta = stack.bukkitStack().getItemMeta();
+    if (meta != null) {
+      meta.getPersistentDataContainer().set(SOCKET_ENTRIES_KEY, PersistentDataType.STRING, "");
+      stack.bukkitStack().setItemMeta(meta);
+    }
+    stack.render(viewer);
+  }
   static NamespacedKey slotKey() { return SLOT_KEY; }
   static NamespacedKey categoryKey() { return CATEGORY_KEY; }
   static boolean supports(Material material) { return material.isItem() && !SocketLayouts.forMaterial(material).isEmpty(); }
+
+  /**
+   * Converts mapped vanilla enchantments (e.g. Sharpness) into their trueMC
+   * catalog enchantment (e.g. Lethality) before socket assignment, matching
+   * trueMC's item normalization.
+   */
+  private static void adoptVanillaEnchantments(DevItemStack stack) {
+    Map<EnchantmentId, Integer> additions = new HashMap<>();
+    ArrayList<DevEnchantment> removals = new ArrayList<>();
+    for (Map.Entry<DevEnchantment, Integer> entry : stack.enchantments().entrySet()) {
+      DevEnchantment enchantment = entry.getKey();
+      if (!enchantment.vanilla()) continue;
+      EnchantmentId targetId = EnchantmentCatalog.vanillaTarget(enchantment.id().path());
+      if (targetId == null || targetId.equals(enchantment.id())) continue;
+      DevEnchantment target = ItemsPlugin.instance().enchantments().get(targetId).orElse(null);
+      if (target == null) continue;
+      additions.merge(targetId, entry.getValue(), Integer::sum);
+      removals.add(enchantment);
+    }
+    if (removals.isEmpty()) return;
+    removals.forEach(stack::removeEnchantment);
+    additions.forEach((id, level) -> ItemsPlugin.instance().enchantments().get(id).ifPresent(target ->
+      stack.enchant(target, Math.min(level, EnchantmentCatalog.maximumLevel(target)))));
+  }
 
   private Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> normalizeEntries(
     DevItemStack stack, List<Map.Entry<DevEnchantment, EnchantmentData>> entries

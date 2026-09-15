@@ -34,16 +34,22 @@ import org.bukkit.potion.PotionData;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class TypedSocketModelTest {
-  @Test void everyExperienceLevelCostsTheVanillaFiveToSixAmount() {
-    assertEquals(17, LinearExperience.POINTS_PER_LEVEL);
+  @BeforeAll static void loadCatalog() {
+    TestConfig.bootstrap();
+  }
+
+  @Test void everyExperienceLevelCostsTheConfiguredAmount() {
+    assertEquals(100, LinearExperience.DEFAULT_POINTS_PER_LEVEL);
+    assertEquals(100, LinearExperience.pointsPerLevel());
     assertEquals(0, LinearExperience.totalPoints(0, 0F));
-    assertEquals(17, LinearExperience.totalPoints(1, 0F));
-    assertEquals(85, LinearExperience.totalPoints(5, 0F));
-    assertEquals(102, LinearExperience.totalPoints(6, 0F));
-    assertEquals(94, LinearExperience.totalPoints(5, 9F / 17F));
+    assertEquals(100, LinearExperience.totalPoints(1, 0F));
+    assertEquals(500, LinearExperience.totalPoints(5, 0F));
+    assertEquals(600, LinearExperience.totalPoints(6, 0F));
+    assertEquals(553, LinearExperience.totalPoints(5, 9F / 17F));
   }
 
   @Test void mendingLevelsRiseThroughTheConfiguredTierThresholds() {
@@ -210,9 +216,9 @@ class TypedSocketModelTest {
     assertEquals("GoldenPickaxe", SocketedItemOverrides.create(Material.GOLDEN_PICKAXE).getClass().getSimpleName());
   }
 
-  @Test void exactAllowlistExcludesWoodAndUnlistedNetheritePickaxe() {
+  @Test void exactAllowlistExcludesWoodAndIncludesConfiguredNetheriteTools() {
     assertFalse(SocketedVanillaItem.supports(Material.WOODEN_SWORD));
-    assertFalse(SocketedVanillaItem.supports(Material.NETHERITE_PICKAXE));
+    assertTrue(SocketedVanillaItem.supports(Material.NETHERITE_PICKAXE));
     assertTrue(SocketedVanillaItem.supports(Material.IRON_SWORD));
   }
 
@@ -230,7 +236,8 @@ class TypedSocketModelTest {
       EnchantmentCategory.TIDE,
       EnchantmentCategory.HARVESTING,
       EnchantmentCategory.HARVESTING,
-      EnchantmentCategory.HARVESTING
+      EnchantmentCategory.HARVESTING,
+      EnchantmentCategory.SUSTAINABILITY
     ), SocketLayouts.forMaterial(Material.FISHING_ROD));
   }
 
@@ -367,13 +374,13 @@ class TypedSocketModelTest {
     assertTrue(EnchantmentEffectsListener.wingedProtectionActive(null, true, 4_000L));
     var vertical = EnchantmentEffectsListener.wingedLaunchVelocity(
       new org.bukkit.util.Vector(.01D, -.1D, 0D), new org.bukkit.util.Vector(1D, 0D, 0D));
-    assertEquals(.01D, vertical.getX());
-    assertEquals(.75D, vertical.getY(), 0.000_001D);
+    assertEquals(0.804_984D, vertical.getX(), 0.000_001D);
+    assertEquals(0.402_492D, vertical.getY(), 0.000_001D);
     assertEquals(0D, vertical.getZ());
     var sprinting = EnchantmentEffectsListener.wingedLaunchVelocity(
       new org.bukkit.util.Vector(.05D, -.1D, 0D), new org.bukkit.util.Vector(1D, .5D, 0D));
-    assertEquals(.25D, sprinting.getX(), 0.000_001D);
-    assertEquals(.7D, sprinting.getY());
+    assertEquals(0.804_984D, sprinting.getX(), 0.000_001D);
+    assertEquals(0.402_492D, sprinting.getY(), 0.000_001D);
     assertEquals(0D, sprinting.getZ());
     assertTrue(full.startsWith("§fDouble Jump §8-"));
   }

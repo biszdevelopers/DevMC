@@ -13,9 +13,14 @@ import dev.bisz.enchants.items.WingedEnchantment;
 import java.util.Map;
 import java.util.List;
 import java.util.Random;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class GenerationModelTest {
+  @BeforeAll static void loadCatalog() {
+    TestConfig.bootstrap();
+  }
+
   @Test void bookshelfStatisticsRemainUncappedForDisplay() {
     assertEquals(500, new BookshelfModifierData(50, 500).extraChancePercent());
   }
@@ -29,9 +34,10 @@ class GenerationModelTest {
     assertEquals(4, DefaultEnchantmentGenerator.extraRolls(1200, fixed(0)));
   }
 
-  @Test void materialCostsUseTheSpecifiedRootsOffsetsAndMinimums() {
-    assertEquals(new EnchantingCosts.OfferCost(25, 1), EnchantingCosts.roll(0, fixed(0)));
-    assertEquals(new EnchantingCosts.OfferCost(39, 18), EnchantingCosts.roll(25, fixed(10)));
+  @Test void offerCostsAreConstantForTheMaterial() {
+    assertEquals(new EnchantingCosts.OfferCost(0, 1), EnchantingCosts.roll(0, fixed(0)));
+    assertEquals(new EnchantingCosts.OfferCost(25, 1), EnchantingCosts.roll(25, fixed(10)));
+    assertEquals(new EnchantingCosts.OfferCost(25, 1), EnchantingCosts.roll(99, fixed(10)));
   }
 
   @Test void copiedYamlMaximumLevelsCoverCustomAndVanillaEnchantments() {

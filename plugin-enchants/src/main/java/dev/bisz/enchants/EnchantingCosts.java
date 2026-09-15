@@ -1,68 +1,89 @@
 package dev.bisz.enchants;
 
-import dev.bisz.bundler.JSON;
-import java.io.IOException;
-import java.io.InputStream;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.random.RandomGenerator;
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 
-/** ServerData-backed material costs and deterministic offer-cost rolling. */
+/** Config-driven material costs, refunds, and constant per-item enchant prices. */
 final class EnchantingCosts {
-  static final String FILE = "enchants/costs.json";
-  private static final int BASE_ENCHANTMENT_LEVEL_REQUIREMENT = 30;
-  private final Map<String, Object> values;
+  private final Map<String, Integer> materials;
+  private final Map<String, Integer> items;
+  private final double multiplier;
+  private final int refundPercent;
+  private final int lapisCost;
 
-  private EnchantingCosts(Map<String, Object> values) {
-    this.values = Map.copyOf(values);
+  private EnchantingCosts(
+    Map<String, Integer> materials, Map<String, Integer> items,
+    double multiplier, int refundPercent, int lapisCost
+  ) {
+    this.materials = Map.copyOf(materials);
+    this.items = Map.copyOf(items);
+    this.multiplier = multiplier;
+    this.refundPercent = refundPercent;
+    this.lapisCost = Math.max(0, lapisCost);
   }
 
-  static EnchantingCosts load(EnchantsPlugin plugin) {
-    try (InputStream defaults = plugin.getResource("costs.json")) {
-      if (defaults == null) throw new IllegalStateException("Missing bundled enchantment cost defaults");
-      JSON.mergeMissingDefaults(FILE, defaults);
-    } catch (IOException exception) {
-      throw new IllegalStateException("Cannot close bundled enchantment cost defaults", exception);
+  static EnchantingCosts load(EnchantsConfig config) {
+    FileConfiguration costs = config.costs();
+    FileConfiguration main = config.config();
+    return new EnchantingCosts(
+      section(costs, "materials"),
+      section(costs, "items"),
+      main.getDouble("cost.multiplier", 1.0),
+      main.getInt("cost.refund-percent", 80),
+      main.getInt("enchanting.lapis-cost", 3));
+  }
+
+  static EnchantingCosts from(Map<String, Object> values) {
+    Map<String, Integer> materials = new HashMap<>();
+    Map<String, Integer> items = new HashMap<>();
+    for (Map.Entry<String, Object> entry : values.entrySet()) {
+      if (entry.getValue() instanceof Number number) {
+        materials.put(entry.getKey().toLowerCase(Locale.ROOT), number.intValue());
+      }
     }
-    return new EnchantingCosts(JSON.loadDataFromDataBase(FILE));
+    return new EnchantingCosts(materials, items, 1.0, 80, 3);
   }
 
-  static EnchantingCosts from(Map<String, Object> values) { return new EnchantingCosts(values); }
-
+  /** The constant level cost of enchanting one socket on this item. */
   int materialCost(Material material) {
     Objects.requireNonNull(material, "material");
     String exact = material.getKey().getKey().toLowerCase(Locale.ROOT);
-    int configured = configured(exact, Integer.MIN_VALUE);
-    if (configured != Integer.MIN_VALUE) return clampCost(configured);
-    String tier = tier(material, exact);
-    return clampCost(configured(tier, 0));
+    Integer configured = items.get(exact);
+    if (configured == null) configured = materials.get(tier(material, exact));
+    if (configured == null) configured = materials.getOrDefault("default", 0);
+    return clampCost((int) Math.round(configured * multiplier));
+  }
+
+  /** The level refund granted when a socket is stripped. */
+  int refund(Material material) {
+    return (int) Math.round(materialCost(material) * (refundPercent / 100D));
   }
 
   OfferCost roll(Material material, RandomGenerator random) {
-    return roll(materialCost(material), random);
+    return new OfferCost(materialCost(material), lapisCost);
   }
 
   static OfferCost roll(int materialCost, RandomGenerator random) {
-    materialCost = clampCost(materialCost);
-    int total = materialCost * 2;
-    int lapis = Math.max(1, (int) Math.ceil(Math.sqrt(total)) + random.nextInt(17));
-    int levels = Math.max(1, BASE_ENCHANTMENT_LEVEL_REQUIREMENT
-      + (int) Math.ceil(Math.cbrt(total)) + random.nextInt(11) - 5);
-    return new OfferCost(levels, lapis);
+    return new OfferCost(clampCost(materialCost), 1);
   }
 
-  private int configured(String key, int fallback) {
-    Object value = values.get(key);
-    return value instanceof Number number ? number.intValue() : fallback;
+  private static Map<String, Integer> section(FileConfiguration config, String path) {
+    Map<String, Integer> values = new HashMap<>();
+    ConfigurationSection root = config.getConfigurationSection(path);
+    if (root == null) return values;
+    for (String key : root.getKeys(false)) {
+      values.put(key.toLowerCase(Locale.ROOT), root.getInt(key));
+    }
+    return values;
   }
 
-  private static int clampCost(int value) { return clamp(value, 0, 25); }
-
-  private static int clamp(int value, int minimum, int maximum) {
-    return Math.max(minimum, Math.min(maximum, value));
-  }
+  private static int clampCost(int value) { return Math.max(0, Math.min(25, value)); }
 
   private static String tier(Material material, String key) {
     if (material == Material.TURTLE_HELMET) return "turtle";

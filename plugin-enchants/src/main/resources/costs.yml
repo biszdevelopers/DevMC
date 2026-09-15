@@ -1,0 +1,17 @@
+materials:
+  wood: 0
+  stone: 5
+  copper: 8
+  iron: 9
+  diamond: 10
+  netherite: 15
+  gold: 25
+  leather: 15
+  chainmail: 12
+  turtle: 9
+items:
+  bow: 12
+  crossbow: 12
+  trident: 15
+  fishing_rod: 10
+  mace: 15

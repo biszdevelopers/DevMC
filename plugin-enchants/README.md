@@ -1,3 +1,22 @@
 # Enchants
 
-Localized custom enchanting-table menus for Spigot 1.20.1. The plugin uses Bundler menus and profiles, ItemLib enchantment rendering and metadata, injectable offer generation, and extensible block modifiers.
+trueMC's custom enchanting, socket, XP, and fishing system, integrated with the
+DevMC **Bundler** and **Items** plugins on Spigot 1.20.1.
+
+Socket layouts, the enchantment catalog, costs, and fishing loot are
+config-driven YAML resources. Item state is stored through the Items PDC.
+
+See [docs/enchanting.md](../docs/enchanting.md) for the full specification.
+
+## Commands
+
+`/enchants <give|info|xp|reload>` — permission `enchants.admin` (OP + Bundler
+`ADMIN`).
+
+## Build
+
+Build the whole suite from the repository root:
+
+```shell
+mvn clean package
+```

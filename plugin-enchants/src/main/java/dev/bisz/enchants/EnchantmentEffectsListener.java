@@ -68,10 +68,6 @@ import org.bukkit.util.Vector;
 
 /** Runtime mechanics that require events beyond ItemLib's damage hooks. */
 final class EnchantmentEffectsListener implements Listener {
-  private static final double VANILLA_SPRINT_VELOCITY = .05D;
-  private static final double WINGED_FORWARD_BOOST = 0.2D;
-  private static final double WINGED_AIR_JUMP_VELOCITY = 0.7D;
-  private static final double WINGED_VERTICAL_ONLY_BOOST = 0.85D;
   private static final UUID NIMBLE_MODIFIER = UUID.fromString("78b835f2-9cf0-47bb-b17d-7293e3844072");
   private final EnchantsPlugin plugin;
   private final NamespacedKey extraProjectile;
@@ -354,6 +350,30 @@ final class EnchantmentEffectsListener implements Listener {
       wingedFallProtection.contains(player.getUniqueId()), System.currentTimeMillis())) event.setCancelled(true);
   }
 
+  /** Channeling boosts the lightning damage of nearby trident/rod holders. */
+  @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+  void channeling(EntityDamageEvent event) {
+    if (event.getCause() != EntityDamageEvent.DamageCause.LIGHTNING) return;
+    int best = 0;
+    for (org.bukkit.entity.Entity nearby : event.getEntity().getWorld()
+      .getNearbyEntities(event.getEntity().getLocation(), 16, 16, 16)) {
+      if (!(nearby instanceof Player player)) continue;
+      int level = Math.max(level(player.getInventory().getItemInMainHand(), "channeling"),
+        level(player.getInventory().getItemInOffHand(), "channeling"));
+      if (level > best) best = level;
+    }
+    if (best > 0) event.setDamage(event.getDamage() + 3D * best);
+  }
+
+  /** Floats a deduplicated damage number above player-attributed hits. */
+  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+  void damageIndicator(EntityDamageByEntityEvent event) {
+    if (!DamageIndicator.isEnabled()) return;
+    boolean playerSource = event.getDamager() instanceof Player
+      || (event.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Player);
+    if (playerSource) DamageIndicator.show(plugin, event.getEntity(), event.getFinalDamage());
+  }
+
   @EventHandler void quit(PlayerQuitEvent event) {
     restoreLegacyShortbowAmmo(event.getPlayer());
     cleanup(event.getPlayer());
@@ -417,20 +437,9 @@ final class EnchantmentEffectsListener implements Listener {
   }
 
   static Vector wingedLaunchVelocity(Vector current, Vector facing) {
-    double horizontalSpeed = Math.hypot(current.getX(), current.getZ());
-
-//    System.out.println(horizontalSpeed);
-
-    if (horizontalSpeed < VANILLA_SPRINT_VELOCITY) {
-      return current.clone().add(new Vector(0D, WINGED_VERTICAL_ONLY_BOOST, 0D));
-    }
-
-    Vector direction = facing.clone().setY(0D);
-    if (direction.lengthSquared() > 0D) {
-      direction.normalize().multiply(WINGED_FORWARD_BOOST);
-    }
-
-    return current.clone().add(direction).setY(WINGED_AIR_JUMP_VELOCITY);
+    Vector direction = facing.clone().setY(0.5D);
+    if (direction.lengthSquared() > 0D) direction.normalize();
+    return direction.multiply(0.9D);
   }
 
   private static boolean cooldownActive(
@@ -561,9 +570,10 @@ final class EnchantmentEffectsListener implements Listener {
     if (item == null || item.getType().isAir()) return 0;
     try {
       DevItemStack stack = ItemsPlugin.instance().factory().wrap(item);
-      boolean vanilla = path.equals("multishot") || path.equals("riptide");
       DevEnchantment enchantment = ItemsPlugin.instance().enchantments()
-        .get(EnchantmentId.of(vanilla ? "minecraft" : "enchants", path)).orElse(null);
+        .get(EnchantmentId.of("enchants", path)).orElse(null);
+      if (enchantment == null) enchantment = ItemsPlugin.instance().enchantments()
+        .get(EnchantmentId.of("minecraft", path)).orElse(null);
       return enchantment == null ? 0 : stack.enchantmentLevel(enchantment).orElse(0);
     } catch (RuntimeException ignored) { return 0; }
   }
