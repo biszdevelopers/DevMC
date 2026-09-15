@@ -15,6 +15,7 @@ public abstract class MenuTemplate {
   private final int rows;
   private final Map<Integer, MenuItem> items;
   private final Map<Integer, StorageSlot> storageSlots;
+  private final Map<Integer, MenuItem> storagePlaceholders;
   private final Consumer<MenuOpenContext> openAction;
   private final Consumer<MenuClickContext> unhandledClickAction;
   private final Consumer<MenuCloseContext> closeAction;
@@ -26,6 +27,7 @@ public abstract class MenuTemplate {
     this.rows = builder.rows;
     this.items = Map.copyOf(builder.items);
     this.storageSlots = Map.copyOf(builder.storageSlots);
+    this.storagePlaceholders = Map.copyOf(builder.storagePlaceholders);
     this.openAction = builder.openAction;
     this.unhandledClickAction = builder.unhandledClickAction;
     this.closeAction = builder.closeAction;
@@ -53,6 +55,14 @@ public abstract class MenuTemplate {
 
   final Map<Integer, StorageSlot> storageSlots() {
     return storageSlots;
+  }
+
+  /**
+   * Items shown in storage-mapped cells while their provider index is empty.
+   * They are display-only decoration and are never written to storage.
+   */
+  final Map<Integer, MenuItem> storagePlaceholders() {
+    return storagePlaceholders;
   }
 
   final Consumer<MenuOpenContext> openAction() {
@@ -99,6 +109,8 @@ public abstract class MenuTemplate {
     protected final Map<Integer, MenuItem> items = new LinkedHashMap<>();
     protected final Map<Integer, StorageSlot> storageSlots =
       new LinkedHashMap<>();
+    protected final Map<Integer, MenuItem> storagePlaceholders =
+      new LinkedHashMap<>();
     private Consumer<MenuOpenContext> openAction;
     private Consumer<MenuClickContext> unhandledClickAction;
     private Consumer<MenuCloseContext> closeAction;
@@ -125,18 +137,24 @@ public abstract class MenuTemplate {
       return self();
     }
 
-    /** Places or replaces a static item. */
+    /**
+     * Places or replaces a static item. On a storage-mapped slot the item
+     * becomes the placeholder shown whenever that cell's provider index is
+     * empty; it is display-only and never enters storage.
+     */
     public final B item(int slot, MenuItem item) {
       validateSlot(slot);
       Objects.requireNonNull(item, "item");
-      if (!storageSlots.containsKey(slot)) items.put(slot, item);
+      if (storageSlots.containsKey(slot)) storagePlaceholders.put(slot, item);
+      else items.put(slot, item);
       return self();
     }
 
-    /** Removes a previously configured static item. */
+    /** Removes a previously configured static item or storage placeholder. */
     public final B removeItem(int slot) {
       validateSlot(slot);
       items.remove(slot);
+      storagePlaceholders.remove(slot);
       return self();
     }
 
@@ -150,8 +168,10 @@ public abstract class MenuTemplate {
       if (storageSlot < 0) throw new IllegalArgumentException(
         "storageSlot cannot be negative"
       );
-      // Storage is authoritative: a mapping replaces an earlier decorative item.
-      items.remove(menuSlot);
+      // Storage is authoritative: an earlier decorative item becomes the
+      // placeholder for an empty provider index instead of being dropped.
+      MenuItem previous = items.remove(menuSlot);
+      if (previous != null) storagePlaceholders.put(menuSlot, previous);
       if (
         storageSlots.putIfAbsent(
           menuSlot,

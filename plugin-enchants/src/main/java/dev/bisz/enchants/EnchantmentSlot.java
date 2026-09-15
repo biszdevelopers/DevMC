@@ -3,6 +3,7 @@ package dev.bisz.enchants;
 import dev.bisz.items.DevEnchantment;
 import java.util.Objects;
 import java.util.function.Predicate;
+import org.bukkit.Material;
 
 /** One ordered enchantment socket on a socketed vanilla item definition. */
 public final class EnchantmentSlot {
@@ -22,6 +23,28 @@ public final class EnchantmentSlot {
 
   public boolean accepts(DevEnchantment enchantment) {
     return acceptance.test(Objects.requireNonNull(enchantment, "enchantment"));
+  }
+
+  /**
+   * Whether this socket accepts the enchantment on an item of the given
+   * material. Universal sockets accept every offered enchantment; typed
+   * sockets additionally require the enchantment to fit the material.
+   */
+  public boolean accepts(DevEnchantment enchantment, Material material) {
+    if (!accepts(enchantment)) return false;
+    if (category == EnchantmentCategory.UNIVERSAL) return true;
+    return EnchantmentCatalog.applicable(enchantment, Objects.requireNonNull(material, "material"));
+  }
+
+  /**
+   * The category a socket presents while holding the given enchantment. A
+   * filled universal socket adopts the enchantment's own category; typed
+   * sockets keep their category.
+   */
+  public EnchantmentCategory filledCategory(DevEnchantment enchantment) {
+    if (category != EnchantmentCategory.UNIVERSAL) return category;
+    EnchantmentCategory actual = EnchantmentCatalog.category(Objects.requireNonNull(enchantment, "enchantment"));
+    return actual == null ? category : actual;
   }
 
   public static EnchantmentSlot typed(int index, EnchantmentCategory category) {

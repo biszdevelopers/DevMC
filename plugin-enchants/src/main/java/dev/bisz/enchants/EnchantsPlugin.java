@@ -1,6 +1,7 @@
 package dev.bisz.enchants;
 
 import dev.bisz.bundler.JSON;
+import dev.bisz.commands.CommandRegistery;
 import dev.bisz.players.locales.Locale;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,9 +22,13 @@ public final class EnchantsPlugin extends JavaPlugin {
   private EnchantingCosts costs;
   private EnchantmentEffectsListener effects;
   private LinearExperienceListener experience;
+  private dev.bisz.enchants.fishing.FishingManager fishing;
+  private SocketStationController stations;
+  private EnchantsConfig config;
 
   @Override public void onLoad() {
     instance = this;
+    config = new EnchantsConfig(this);
     modifiers.add(new BookshelfEnchantmentModifier());
     ItemsPlugin.instance().enchantments().registerAll(this, EnchantmentCatalog.customDefinitions());
     for (Material material : Material.values()) {
@@ -35,18 +40,29 @@ public final class EnchantsPlugin extends JavaPlugin {
 
   @Override public void onEnable() {
     installLocaleDefaults();
-    costs = EnchantingCosts.load(this);
+    config.load();
+    LinearExperience.setPointsPerLevel(
+      EnchantsConfig.integer(config.config(), "xp.points-per-level", LinearExperience.DEFAULT_POINTS_PER_LEVEL));
+    DamageIndicator.setEnabled(EnchantsConfig.bool(config.config(), "display.damage-indicators", true));
+    costs = EnchantingCosts.load(config);
     menus = new EnchantingMenuController(this);
     getServer().getPluginManager().registerEvents(menus, this);
     effects = new EnchantmentEffectsListener(this);
     getServer().getPluginManager().registerEvents(effects, this);
+    fishing = new dev.bisz.enchants.fishing.FishingManager(this, config.fishing());
+    getServer().getPluginManager().registerEvents(fishing, this);
+    stations = new SocketStationController(this);
+    getServer().getPluginManager().registerEvents(stations, this);
     experience = new LinearExperienceListener(this);
     getServer().getPluginManager().registerEvents(experience, this);
+    CommandRegistery.register(this, new EnchantsCommand(this));
   }
 
   @Override public void onDisable() {
     if (menus != null) menus.dispose();
     if (effects != null) effects.dispose();
+    if (stations != null) stations.dispose();
+    CommandRegistery.unregisterAll(this);
     ItemsPlugin.instance().registry().unregisterAll(this);
     ItemsPlugin.instance().enchantments().unregisterAll(this);
     if (instance == this) instance = null;
@@ -85,6 +101,19 @@ public final class EnchantsPlugin extends JavaPlugin {
 
   EnchantingCosts enchantingCosts() {
     return Objects.requireNonNull(costs, "Enchantment costs are not loaded");
+  }
+
+  EnchantsConfig config() {
+    return Objects.requireNonNull(config, "Enchants config is not loaded");
+  }
+
+  /** Reloads the ServerData JSON configuration and rebuilds the derived costs. */
+  public void reload() {
+    config.load();
+    costs = EnchantingCosts.load(config);
+    LinearExperience.setPointsPerLevel(
+      EnchantsConfig.integer(config.config(), "xp.points-per-level", LinearExperience.DEFAULT_POINTS_PER_LEVEL));
+    DamageIndicator.setEnabled(EnchantsConfig.bool(config.config(), "display.damage-indicators", true));
   }
 
   private void installLocaleDefaults() {

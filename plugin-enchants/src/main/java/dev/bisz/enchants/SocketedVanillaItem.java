@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -59,7 +60,11 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
 
   public List<EnchantmentSlot> sockets() { return sockets; }
   @Override protected void onLoaded(DevItemStack stack) { normalize(stack); }
-  @Override protected List<String> renderEnchantmentLore(DevItemStack stack, Player viewer) { return renderSockets(normalize(stack), viewer); }
+  @Override protected List<String> renderEnchantmentLore(DevItemStack stack, Player viewer) {
+    Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned = normalize(stack);
+    applyGlint(stack, !assigned.isEmpty());
+    return renderSockets(assigned, viewer);
+  }
   @Override public List<Ability> abilities(DevItemStack stack) {
     return abilitiesFor(material(), stack.enchantmentData().keySet());
   }
@@ -96,18 +101,19 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
 
   List<String> renderSockets(Map<Integer, ? extends Map.Entry<DevEnchantment, EnchantmentData>> assigned, Player viewer) {
     ArrayList<String> lines = new ArrayList<>();
-    boolean descriptions = assigned.size() <= 5;
+    boolean descriptions = assigned.size() <= 5 && !TooltipPreferences.collapsed(viewer);
     for (EnchantmentSlot socket : sockets) {
       Map.Entry<DevEnchantment, EnchantmentData> entry = assigned.get(socket.index());
       if (entry == null) {
-        lines.add(SocketDisplayRenderer.empty("§7", socket.category().icon(), viewer));
+        lines.add(SocketDisplayRenderer.empty(socket.category().icon(), viewer));
         continue;
       }
       // A filled socket begins its own lore block even when the socket directly
       // above it is empty. Filled sections already separated by a description's
       // trailing blank line must not receive a second separator.
       separateFilledSocket(lines);
-      lines.add(SocketDisplayRenderer.filled(socket.category().color(), socket.category().icon(), entry, viewer));
+      EnchantmentCategory display = socket.filledCategory(entry.getKey());
+      lines.add(SocketDisplayRenderer.filled(display.color(), display.icon(), entry, viewer));
       if (isMending(entry.getKey())) {
         if (descriptions) {
           lines.addAll(renderMendingDescription(viewer));
@@ -148,9 +154,8 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
 
   void applySocketEnchantment(DevItemStack stack, DevEnchantment enchantment, EnchantmentData data) {
     HashMap<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned = new HashMap<>(normalize(stack));
-    if (!EnchantmentCatalog.repeatable(enchantment) && assigned.values().stream()
-      .anyMatch(entry -> entry.getKey().id().equals(enchantment.id())))
-      throw new IllegalArgumentException("Only Efficiency may occupy repeated sockets");
+    if (!EnchantmentCatalog.compatible(enchantment, assigned.values().stream().map(Map.Entry::getKey).toList()))
+      throw new IllegalArgumentException("Enchantment cannot be applied alongside the item's current enchantments");
     Object raw = data.metadata().get(SLOT_KEY);
     if (!(raw instanceof Integer slot) || slot < 0 || slot >= sockets.size() || assigned.containsKey(slot)
       || !sockets.get(slot).accepts(enchantment))
@@ -283,6 +288,7 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
   Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> normalize(DevItemStack stack) {
     Objects.requireNonNull(stack, "stack");
     ensureMendingMetadata(stack);
+    adoptVanillaEnchantments(stack);
     List<Map.Entry<DevEnchantment, EnchantmentData>> stored = readSocketEntries(stack);
     if (stored != null) return normalizeEntries(stack, stored);
     ArrayList<Map.Entry<DevEnchantment, EnchantmentData>> ranked = new ArrayList<>(stack.enchantmentData().entrySet());
@@ -328,9 +334,87 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
     Map<Integer, ?> assigned = normalize(stack);
     return sockets.stream().filter(slot -> !assigned.containsKey(slot.index())).toList();
   }
+
+  /** Removes every socketed enchantment and clears the serialized socket list. */
+  void stripAll(DevItemStack stack, Player viewer) {
+    for (DevEnchantment enchantment : new ArrayList<>(stack.enchantmentData().keySet())) {
+      if (EnchantmentCatalog.offered(enchantment)) stack.removeEnchantment(enchantment);
+    }
+    ItemMeta meta = stack.bukkitStack().getItemMeta();
+    if (meta != null) {
+      meta.getPersistentDataContainer().set(SOCKET_ENTRIES_KEY, PersistentDataType.STRING, "");
+      stack.bukkitStack().setItemMeta(meta);
+    }
+    stack.render(viewer);
+  }
   static NamespacedKey slotKey() { return SLOT_KEY; }
   static NamespacedKey categoryKey() { return CATEGORY_KEY; }
   static boolean supports(Material material) { return material.isItem() && !SocketLayouts.forMaterial(material).isEmpty(); }
+
+  /**
+   * Custom enchantments live in ItemLib's PDC payload, so the item would not
+   * otherwise show the vanilla enchantment glint. A hidden marker enchantment
+   * supplies the glint and is hidden by HIDE_ENCHANTS. Luck of the Sea is a
+   * genuine fishing-rod enchantment, so rods use Protection instead and any
+   * stray Luck of the Sea on a rod is stripped.
+   */
+  private static final Enchantment GLINT_MARKER = Enchantment.LUCK;
+  private static final Enchantment FISHING_ROD_GLINT_MARKER = Enchantment.PROTECTION_ENVIRONMENTAL;
+
+  private static void applyGlint(DevItemStack stack, boolean glint) {
+    ItemMeta meta = stack.bukkitStack().getItemMeta();
+    if (meta == null) return;
+    boolean rod = stack.bukkitStack().getType() == Material.FISHING_ROD;
+    boolean changed = false;
+    if (rod && meta.hasEnchant(GLINT_MARKER)) {
+      meta.removeEnchant(GLINT_MARKER);
+      changed = true;
+    }
+    Enchantment marker = rod ? FISHING_ROD_GLINT_MARKER : GLINT_MARKER;
+    boolean present = meta.hasEnchant(marker);
+    if (glint != present) {
+      if (glint) meta.addEnchant(marker, 1, true);
+      else meta.removeEnchant(marker);
+      changed = true;
+    }
+    if (changed) stack.bukkitStack().setItemMeta(meta);
+  }
+
+  /** Removes the enchantment assigned to one socket and reconciles totals. */
+  void removeSocket(DevItemStack stack, int index) {
+    Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned = new HashMap<>(normalize(stack));
+    Map.Entry<DevEnchantment, EnchantmentData> removed = assigned.remove(index);
+    if (removed == null) return;
+    stack.removeEnchantment(removed.getKey());
+    synchronizeTotals(stack, assigned);
+    writeSocketEntries(stack, assigned);
+    ensureMendingMetadata(stack);
+    stack.render(null);
+  }
+
+  /**
+   * Converts mapped vanilla enchantments (e.g. Sharpness) into their trueMC
+   * catalog enchantment (e.g. Lethality) before socket assignment, matching
+   * trueMC's item normalization.
+   */
+  private static void adoptVanillaEnchantments(DevItemStack stack) {
+    Map<EnchantmentId, Integer> additions = new HashMap<>();
+    ArrayList<DevEnchantment> removals = new ArrayList<>();
+    for (Map.Entry<DevEnchantment, Integer> entry : stack.enchantments().entrySet()) {
+      DevEnchantment enchantment = entry.getKey();
+      if (!enchantment.vanilla()) continue;
+      EnchantmentId targetId = EnchantmentCatalog.vanillaTarget(enchantment.id().path());
+      if (targetId == null || targetId.equals(enchantment.id())) continue;
+      DevEnchantment target = ItemsPlugin.instance().enchantments().get(targetId).orElse(null);
+      if (target == null) continue;
+      additions.merge(targetId, entry.getValue(), Integer::sum);
+      removals.add(enchantment);
+    }
+    if (removals.isEmpty()) return;
+    removals.forEach(stack::removeEnchantment);
+    additions.forEach((id, level) -> ItemsPlugin.instance().enchantments().get(id).ifPresent(target ->
+      stack.enchant(target, Math.min(level, EnchantmentCatalog.maximumLevel(target)))));
+  }
 
   private Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> normalizeEntries(
     DevItemStack stack, List<Map.Entry<DevEnchantment, EnchantmentData>> entries
@@ -508,9 +592,7 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
   }
 
   private boolean acceptsOnItem(DevEnchantment enchantment) {
-    boolean universal = sockets.stream().anyMatch(slot -> slot.category() == EnchantmentCategory.UNIVERSAL);
-    return sockets.stream().anyMatch(slot -> slot.accepts(enchantment))
-      && (universal || EnchantmentCatalog.applicable(enchantment, material()));
+    return sockets.stream().anyMatch(slot -> slot.accepts(enchantment, material()));
   }
   private static String locale(Player viewer, String key, Object... arguments) {
     return viewer == null ? Locale.get("en_us", key, arguments) : Locale.get(viewer, key, arguments);

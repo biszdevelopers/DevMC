@@ -27,14 +27,11 @@ public final class DefaultEnchantmentGenerator implements EnchantmentGenerator {
     int percent = context.modifiers().stream().filter(BookshelfModifierData.class::isInstance)
       .map(BookshelfModifierData.class::cast).mapToInt(BookshelfModifierData::extraChancePercent).sum();
     RandomGenerator random = context.random();
-    ArrayList<EnchantmentOffer> offers = new ArrayList<>(3);
-    for (int ignored = 0; ignored < 3; ignored++) {
-      List<EnchantmentSelection> selected = select(item.getType(), wrapped, definition, selectedSocket, book, percent, random);
-      if (selected.isEmpty()) continue;
-      EnchantingCosts.OfferCost cost = EnchantsPlugin.instance().enchantingCosts().roll(item.getType(), random);
-      offers.add(new EnchantmentOffer(cost.experienceLevels(), cost.lapisLazuli(), 1.0, selected, List.of()));
-    }
-    return orderOffers(offers);
+    List<EnchantmentSelection> selected = select(item.getType(), wrapped, definition, selectedSocket, percent, random);
+    if (selected.isEmpty()) return List.of();
+    EnchantingCosts.OfferCost cost = EnchantsPlugin.instance().enchantingCosts().roll(item.getType(), random);
+    return orderOffers(List.of(new EnchantmentOffer(
+      cost.experienceLevels(), cost.lapisLazuli(), 1.0, selected, List.of())));
   }
 
   static List<EnchantmentOffer> orderOffers(List<EnchantmentOffer> offers) {
@@ -54,17 +51,18 @@ public final class DefaultEnchantmentGenerator implements EnchantmentGenerator {
 
   private static List<EnchantmentSelection> select(
     Material material, DevItemStack stack, SocketedVanillaItem definition,
-    int selectedSocket, boolean book, int bookshelfPercent, RandomGenerator random
+    int selectedSocket, int bookshelfPercent, RandomGenerator random
   ) {
-    ArrayList<DevEnchantment> candidates = new ArrayList<>(ItemsPlugin.instance().enchantments().values().stream()
-      .filter(EnchantmentCatalog::offered)
-      .filter(enchantment -> book || EnchantmentCatalog.applicable(enchantment, material))
-      .sorted(Comparator.comparing(enchantment -> enchantment.id().toString())).toList());
-    Map<DevEnchantment, EnchantmentData> existing = stack.enchantmentData();
     EnchantmentSlot slot = definition.sockets().get(selectedSocket);
-    ArrayList<DevEnchantment> choices = new ArrayList<>();
-    for (DevEnchantment candidate : candidates)
-      if (slot.accepts(candidate) && compatible(candidate, existing.keySet(), java.util.Set.of())) choices.add(candidate);
+    // Candidate-first generation: enumerate everything that can still be placed
+    // in this socket without breaking a rule, then pick one. The offer exists
+    // whenever this list is non-empty.
+    List<DevEnchantment> choices = EnchantmentCatalog.candidates(
+      slot,
+      material,
+      stack.enchantmentData().keySet(),
+      ItemsPlugin.instance().enchantments().values().stream()
+        .sorted(Comparator.comparing(enchantment -> enchantment.id().toString())).toList());
     if (choices.isEmpty()) return List.of();
     DevEnchantment selected = choices.get(random.nextInt(choices.size()));
     Map<org.bukkit.NamespacedKey, Object> metadata = new java.util.LinkedHashMap<>();
@@ -72,22 +70,14 @@ public final class DefaultEnchantmentGenerator implements EnchantmentGenerator {
     metadata.put(SocketedVanillaItem.categoryKey(), slot.category().ordinal());
     if (SocketedVanillaItem.isMending(selected))
       metadata.put(SocketedVanillaItem.mendingCountKey(), 0);
-    int level = Math.min(EnchantmentCatalog.maximumLevel(selected), 1 + extraRolls(bookshelfPercent, random));
+    int maxLevel = EnchantmentCatalog.maximumLevel(selected);
+    int level = Math.min(maxLevel, 1 + random.nextInt(Math.max(1, maxLevel)) + extraRolls(bookshelfPercent, random));
     return List.of(new EnchantmentSelection(selected, new EnchantmentData(level, metadata)));
   }
 
   private static boolean validFreeSocket(SocketedVanillaItem definition, DevItemStack stack, int selectedSocket) {
     return selectedSocket >= 0 && selectedSocket < definition.sockets().size()
       && definition.freeSlots(stack).stream().anyMatch(slot -> slot.index() == selectedSocket);
-  }
-
-  private static boolean compatible(DevEnchantment candidate, java.util.Set<DevEnchantment> existing, java.util.Set<DevEnchantment> selected) {
-    boolean alreadyPresent = java.util.stream.Stream.concat(existing.stream(), selected.stream())
-      .anyMatch(other -> other.id().equals(candidate.id()));
-    if (alreadyPresent && !EnchantmentCatalog.repeatable(candidate)) return false;
-    return java.util.stream.Stream.concat(existing.stream(), selected.stream())
-      .filter(other -> !other.id().equals(candidate.id()))
-      .noneMatch(other -> EnchantmentCatalog.conflicts(candidate, other));
   }
 
 }

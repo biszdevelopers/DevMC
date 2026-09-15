@@ -31,6 +31,50 @@ class MenuTemplateTest {
   }
 
   @Test
+  void storageCellsExposePlaceholdersInsteadOfStaticItems() {
+    MenuItem decoration = item();
+    MenuItem placeholder = item();
+    var template = SinglePageMenuTemplate.builder("Placeholders", 1)
+      .item(0, decoration)
+      .storageIndex(0, 5)
+      .item(1, placeholder)
+      .storageIndex(1, 6)
+      .build();
+
+    assertTrue(template.baseItems().isEmpty());
+    assertSame(decoration, template.storagePlaceholders().get(0));
+    assertSame(placeholder, template.storagePlaceholders().get(1));
+
+    RenderedMenuPage page = template.render(null, 1, null);
+    assertSame(decoration, page.items().get(0));
+    assertSame(placeholder, page.items().get(1));
+  }
+
+  @Test
+  void removeItemAlsoClearsAStoragePlaceholder() {
+    var template = SinglePageMenuTemplate.builder("Cleared", 1)
+      .item(0, item())
+      .storageIndex(0, 0)
+      .removeItem(0)
+      .build();
+
+    assertTrue(template.storagePlaceholders().isEmpty());
+    assertTrue(template.render(null, 1, null).items().isEmpty());
+  }
+
+  @Test
+  void plainStaticItemsNeverBecomePlaceholders() {
+    MenuItem plain = item();
+    var template = SinglePageMenuTemplate.builder("Plain", 1)
+      .item(0, plain)
+      .build();
+
+    assertSame(plain, template.baseItems().get(0));
+    assertTrue(template.storagePlaceholders().isEmpty());
+    assertSame(plain, template.render(null, 1, null).items().get(0));
+  }
+
+  @Test
   void rejectsDuplicateBackingStorageIndices() {
     var builder = SinglePageMenuTemplate.builder("Storage", 1)
       .storageSlot(0, 4)

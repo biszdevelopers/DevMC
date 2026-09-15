@@ -34,8 +34,8 @@ public final class EnchantmentOffer {
     List<EnchantmentSelection> baseSelections,
     List<EnchantmentSelection> extraSelections
   ) {
-    if (experienceLevels < 1 || lapisLazuli < 1)
-      throw new IllegalArgumentException("Offer costs must be positive");
+    if (experienceLevels < 0 || lapisLazuli < 0)
+      throw new IllegalArgumentException("Offer costs cannot be negative");
     if (!Double.isFinite(qualityMultiplier) || qualityMultiplier <= 0.0)
       throw new IllegalArgumentException("Cost multiplier must be positive and finite");
     this.experienceLevels = experienceLevels;

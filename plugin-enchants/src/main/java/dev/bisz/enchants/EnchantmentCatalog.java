@@ -2,6 +2,8 @@ package dev.bisz.enchants;
 
 import dev.bisz.items.CustomEnchantment;
 import dev.bisz.items.DevEnchantment;
+import dev.bisz.items.EnchantmentId;
+import dev.bisz.items.VanillaEnchantment;
 import dev.bisz.enchants.items.AcrobaticsEnchantment;
 import dev.bisz.enchants.items.ImpactResistanceEnchantment;
 import dev.bisz.enchants.items.InflameEnchantment;
@@ -10,6 +12,8 @@ import dev.bisz.enchants.items.LethalityEnchantment;
 import dev.bisz.enchants.items.NimbleEnchantment;
 import dev.bisz.enchants.items.PenetrationEnchantment;
 import dev.bisz.enchants.items.WingedEnchantment;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,9 +40,14 @@ final class EnchantmentCatalog {
 
   static boolean offered(DevEnchantment enchantment) { return category(enchantment) != null; }
 
-  /** Maximum levels copied from trueMCSource's enchantments.yml. */
+  /** Maximum levels copied from trueMC's enchantment catalog. */
   static int maximumLevel(DevEnchantment enchantment) {
     return MAX_LEVELS.getOrDefault(enchantment.id().toString(), 1);
+  }
+
+  /** The catalog entry a vanilla enchantment key converts into, if any. */
+  static EnchantmentId vanillaTarget(String vanillaKey) {
+    return VANILLA_TARGETS.get(vanillaKey);
   }
 
   /** Efficiency alone may occupy more than one socket on the same item. */
@@ -58,7 +67,7 @@ final class EnchantmentCatalog {
     if (id.equals("minecraft:multishot")) return name.equals("BOW") || name.equals("CROSSBOW") || name.equals("TRIDENT");
     if (id.equals("enchants:acrobatics")) return name.equals("MACE") || name.endsWith("_SPEAR");
     if (id.equals("enchants:winged")) return name.endsWith("BOOTS");
-    if (enchantment instanceof dev.bisz.items.VanillaEnchantment vanilla) {
+    if (enchantment instanceof VanillaEnchantment vanilla) {
       if (name.equals("FISHING_ROD") && (category == EnchantmentCategory.TIDE || category == EnchantmentCategory.HARVESTING)) return true;
       return vanilla.bukkit().canEnchantItem(new ItemStack(material));
     }
@@ -69,12 +78,49 @@ final class EnchantmentCatalog {
     return isWeapon(name);
   }
 
+  /**
+   * The pool entries that can still be applied to one socket without breaking a
+   * rule: the socket must accept the enchantment for the item's material, the
+   * enchantment may not already be present unless it is repeatable, and it may
+   * not conflict with anything already on the item. An empty result is the only
+   * case in which the table may present no offer for the socket.
+   */
+  static List<DevEnchantment> candidates(
+    EnchantmentSlot slot,
+    Material material,
+    Iterable<DevEnchantment> existing,
+    Collection<DevEnchantment> pool
+  ) {
+    ArrayList<DevEnchantment> result = new ArrayList<>();
+    for (DevEnchantment candidate : pool) {
+      if (!offered(candidate)) continue;
+      if (!slot.accepts(candidate, material)) continue;
+      if (!compatible(candidate, existing)) continue;
+      result.add(candidate);
+    }
+    return List.copyOf(result);
+  }
+
+  /** Whether an enchantment may join the enchantments already on the item. */
+  static boolean compatible(DevEnchantment candidate, Iterable<DevEnchantment> existing) {
+    boolean present = false;
+    for (DevEnchantment other : existing) {
+      if (other.id().equals(candidate.id())) {
+        present = true;
+        continue;
+      }
+      if (conflicts(candidate, other)) return false;
+    }
+    return !present || repeatable(candidate);
+  }
+
   static boolean conflicts(DevEnchantment left, DevEnchantment right) {
     String a = left.id().path(), b = right.id().path();
+    if (a.equals(b)) return false;
     Set<String> pair = Set.of(a, b);
     if (pair.contains("silk_touch") && (pair.contains("fortune") || pair.contains("loot_bonus_blocks"))) return true;
     if (pair.contains("riptide") && (pair.contains("loyalty") || pair.contains("channeling"))) return true;
-    if (left instanceof dev.bisz.items.VanillaEnchantment lv && right instanceof dev.bisz.items.VanillaEnchantment rv)
+    if (left instanceof VanillaEnchantment lv && right instanceof VanillaEnchantment rv)
       return lv.bukkit().conflictsWith(rv.bukkit()) || rv.bukkit().conflictsWith(lv.bukkit());
     return false;
   }
@@ -110,11 +156,46 @@ final class EnchantmentCatalog {
     return Map.copyOf(values);
   }
 
+  private static final Map<String, EnchantmentId> VANILLA_TARGETS = buildVanillaTargets();
+
+  private static Map<String, EnchantmentId> buildVanillaTargets() {
+    LinkedHashMap<String, EnchantmentId> values = new LinkedHashMap<>();
+    target(values, "enchants:lethality", "sharpness", "power", "density");
+    target(values, "enchants:penetration", "piercing", "breach");
+    target(values, "enchants:inflame", "fire_aspect", "flame");
+    target(values, "minecraft:looting", "looting");
+    target(values, "enchants:knockback", "knockback");
+    target(values, "enchants:nimble", "quick_charge");
+    target(values, "minecraft:multishot", "multishot");
+    target(values, "enchants:acrobatics", "wind_burst", "lunge");
+    target(values, "minecraft:protection", "protection");
+    target(values, "minecraft:depth_strider", "depth_strider");
+    target(values, "minecraft:frost_walker", "frost_walker");
+    target(values, "minecraft:soul_speed", "soul_speed");
+    target(values, "minecraft:swift_sneak", "swift_sneak");
+    target(values, "minecraft:aqua_affinity", "aqua_affinity");
+    target(values, "minecraft:respiration", "respiration");
+    target(values, "minecraft:loyalty", "loyalty");
+    target(values, "minecraft:channeling", "channeling");
+    target(values, "minecraft:riptide", "riptide");
+    target(values, "minecraft:efficiency", "efficiency");
+    target(values, "minecraft:fortune", "fortune");
+    target(values, "minecraft:silk_touch", "silk_touch");
+    target(values, "minecraft:mending", "mending");
+    target(values, "minecraft:unbreaking", "unbreaking");
+    return Map.copyOf(values);
+  }
+
+  private static void target(Map<String, EnchantmentId> values, String id, String... keys) {
+    int separator = id.indexOf(':');
+    EnchantmentId target = EnchantmentId.of(id.substring(0, separator), id.substring(separator + 1));
+    for (String key : keys) values.put(key, target);
+  }
+
   private static void putLevel(Map<String, Integer> values, int level, String... ids) {
     for (String id : ids) values.put(id, level);
   }
   private static void put(Map<String, EnchantmentCategory> values, EnchantmentCategory category, String... ids) {
     for (String id : ids) values.put(id, category);
   }
-
 }

@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -308,6 +309,11 @@ public final class MenuManager implements Listener {
       !(event.getWhoClicked() instanceof Player player) ||
       player != active.player
     ) return;
+    if (isMenuItem(player.getItemOnCursor())) {
+      player.setItemOnCursor(null);
+      reportCleanup(player, 1);
+      return;
+    }
     if (isInvalidShiftPlacement(
       event.isShiftClick(),
       event.getCurrentItem(),
@@ -316,11 +322,6 @@ public final class MenuManager implements Listener {
       player.setItemOnCursor(clean(event.getCursor()));
       render(active);
       Bukkit.getScheduler().runTask(plugin, player::updateInventory);
-      return;
-    }
-    if (isMenuItem(player.getItemOnCursor())) {
-      player.setItemOnCursor(null);
-      reportCleanup(player, 1);
       return;
     }
     int rawSlot = event.getRawSlot();
@@ -378,41 +379,87 @@ public final class MenuManager implements Listener {
       .anyMatch(slot -> slot < topSize);
     if (!touchesTop) return;
     event.setCancelled(true);
-    for (int rawSlot : event.getRawSlots()) {
-      if (rawSlot >= topSize) continue;
-      StorageSlot mapping = active.rendered.storageSlots().get(rawSlot);
+    Map<StorageSlot, Integer> wanted = storageDragDeltas(
+      event.getNewItems(),
+      active.rendered.storageSlots(),
+      topSize,
+      mapping -> readStorage(active, mapping)
+    );
+    if (wanted.isEmpty()) {
+      render(active);
+      return;
+    }
+    // The server restores the pre-drag cursor only after this event returns,
+    // so the transfer is replayed against the restored cursor next tick.
+    Bukkit.getScheduler().runTask(plugin, () -> completeDrag(active, wanted));
+  }
+
+  /**
+   * Returns the positive per-cell deltas a drag requests on writable storage
+   * cells. Bottom-inventory slots, unmapped cells, and read-only cells are
+   * ignored.
+   */
+  static Map<StorageSlot, Integer> storageDragDeltas(
+    Map<Integer, ItemStack> newItems,
+    Map<Integer, StorageSlot> storageSlots,
+    int topSize,
+    Function<StorageSlot, ItemStack> currentItems
+  ) {
+    LinkedHashMap<StorageSlot, Integer> wanted = new LinkedHashMap<>();
+    for (Map.Entry<Integer, ItemStack> entry : newItems.entrySet()) {
+      if (entry.getKey() >= topSize) continue;
+      StorageSlot mapping = storageSlots.get(entry.getKey());
       if (
         mapping == null || mapping.access() != StorageAccess.READ_WRITE
-      ) return;
+      ) continue;
+      int delta =
+        amount(entry.getValue()) - amount(currentItems.apply(mapping));
+      if (delta > 0) wanted.merge(mapping, delta, Integer::sum);
     }
-    LinkedHashMap<StorageSlot, ItemStack> previousValues =
-      new LinkedHashMap<>();
-    LinkedHashMap<StorageSlot, ItemStack> newValues = new LinkedHashMap<>();
-    for (Map.Entry<Integer, ItemStack> entry : event.getNewItems().entrySet()) {
-      if (entry.getKey() >= topSize) continue;
-      StorageSlot mapping = active.rendered.storageSlots().get(entry.getKey());
+    return Map.copyOf(wanted);
+  }
+
+  /** Applies a cancelled drag by moving the intended amounts off the cursor. */
+  private void completeDrag(
+    ActiveMenu active,
+    Map<StorageSlot, Integer> wanted
+  ) {
+    if (!sessions.containsKey(active.session.sessionId())) return;
+    ItemStack cursor = clean(active.player.getItemOnCursor());
+    if (isEmpty(cursor)) return;
+    List<StorageSlot> ordered = wanted
+      .keySet()
+      .stream()
+      .sorted(Comparator.comparingInt(StorageSlot::menuSlot))
+      .toList();
+    for (StorageSlot mapping : ordered) {
+      if (cursor.getAmount() <= 0) break;
+      int delta = Math.min(wanted.get(mapping), cursor.getAmount());
+      if (delta <= 0) continue;
       ItemStack before = readStorage(active, mapping);
-      ItemStack value = clean(entry.getValue());
-      previousValues.put(mapping, before);
-      newValues.put(mapping, value);
-      if (!writeStorage(active, mapping, value)) {
-        previousValues.forEach((changed, original) ->
-          writeStorage(active, changed, original)
+      ItemStack value;
+      if (isEmpty(before)) {
+        value = cursor.clone();
+        value.setAmount(delta);
+      } else {
+        if (!before.isSimilar(cursor)) continue;
+        delta = Math.min(
+          delta,
+          before.getMaxStackSize() - before.getAmount()
         );
-        render(active);
-        return;
+        if (delta <= 0) continue;
+        value = before.clone();
+        value.setAmount(before.getAmount() + delta);
       }
+      if (!setStorage(active, mapping, before, value)) continue;
+      cursor.setAmount(cursor.getAmount() - delta);
     }
-    newValues.forEach((mapping, value) ->
-      storageChanged(active, mapping, previousValues.get(mapping), value)
-    );
-    for (Map.Entry<Integer, ItemStack> entry : event.getNewItems().entrySet()) {
-      if (entry.getKey() >= topSize) event
-        .getView()
-        .setItem(entry.getKey(), clean(entry.getValue()));
-    }
-    event.getWhoClicked().setItemOnCursor(clean(event.getCursor()));
+    active.player.setItemOnCursor(cursor.getAmount() == 0 ? null : cursor);
     render(active);
+  }
+
+  private static int amount(ItemStack item) {
+    return isEmpty(item) ? 0 : item.getAmount();
   }
 
   @EventHandler(priority = EventPriority.HIGHEST)
@@ -478,8 +525,14 @@ public final class MenuManager implements Listener {
     if (click.isShiftClick()) {
       ItemStack current = clean(event.getCurrentItem());
       if (isEmpty(current)) return;
+      if (orderedWritableStorage(active).isEmpty()) return;
+      // Detach the whole stack before transferring it. Storage callbacks may
+      // hand surplus or rejected items back to the player, and those returns
+      // must be free to land in this now-empty slot instead of being
+      // overwritten by a leftover write.
+      event.setCurrentItem(null);
       ItemStack leftover = moveIntoStorage(active, current);
-      event.setCurrentItem(leftover);
+      giveOrDrop(active.player, leftover);
       render(active);
       return;
     }
@@ -1044,6 +1097,17 @@ public final class MenuManager implements Listener {
       contents[index]
     );
     return copied;
+  }
+
+  private static void giveOrDrop(Player player, ItemStack item) {
+    if (isEmpty(item)) return;
+    player
+      .getInventory()
+      .addItem(item)
+      .values()
+      .forEach(leftover ->
+        player.getWorld().dropItemNaturally(player.getLocation(), leftover)
+      );
   }
 
   private static void requirePrimaryThread() {

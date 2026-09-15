@@ -15,7 +15,7 @@ public final class NimbleEnchantment extends EnchantsEnchantment {
     .description("Instantly fires arrows on left click.")
     .quality(Quality.COMMON)
     .usage(AbilityUsageMethod.LEFT_CLICK)
-    .cooldownSeconds(.2D)
+    .cooldownSeconds(.5D)
     .build();
 
   public NimbleEnchantment() { super("nimble"); }

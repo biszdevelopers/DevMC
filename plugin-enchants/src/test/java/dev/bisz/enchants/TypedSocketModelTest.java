@@ -37,13 +37,14 @@ import org.bukkit.potion.PotionType;
 import org.junit.jupiter.api.Test;
 
 class TypedSocketModelTest {
-  @Test void everyExperienceLevelCostsTheVanillaFiveToSixAmount() {
-    assertEquals(17, LinearExperience.POINTS_PER_LEVEL);
+  @Test void everyExperienceLevelCostsTheConfiguredAmount() {
+    assertEquals(20, LinearExperience.DEFAULT_POINTS_PER_LEVEL);
+    assertEquals(20, LinearExperience.pointsPerLevel());
     assertEquals(0, LinearExperience.totalPoints(0, 0F));
-    assertEquals(17, LinearExperience.totalPoints(1, 0F));
-    assertEquals(85, LinearExperience.totalPoints(5, 0F));
-    assertEquals(102, LinearExperience.totalPoints(6, 0F));
-    assertEquals(94, LinearExperience.totalPoints(5, 9F / 17F));
+    assertEquals(20, LinearExperience.totalPoints(1, 0F));
+    assertEquals(100, LinearExperience.totalPoints(5, 0F));
+    assertEquals(120, LinearExperience.totalPoints(6, 0F));
+    assertEquals(111, LinearExperience.totalPoints(5, 9F / 17F));
   }
 
   @Test void mendingLevelsRiseThroughTheConfiguredTierThresholds() {
@@ -140,6 +141,16 @@ class TypedSocketModelTest {
     assertEquals(1507, LinearExperience.vanillaTotalPoints(31, 0F));
   }
 
+  @Test void damageIndicatorRoundsUpTenthsWithAPositiveFloor() {
+    assertEquals("0.0", DamageIndicator.format(0D));
+    assertEquals("0.0", DamageIndicator.format(-3D));
+    assertEquals("0.1", DamageIndicator.format(0.01D));
+    assertEquals("0.3", DamageIndicator.format(0.30000000000000004D));
+    assertEquals("2.3", DamageIndicator.format(2.3D));
+    assertEquals("2.4", DamageIndicator.format(2.31D));
+    assertEquals("7.0", DamageIndicator.format(7D));
+  }
+
   @Test void shortbowCopiesTippedArrowPotionPayload() {
     PotionData base = new PotionData(PotionType.POISON, false, true);
     PotionEffect custom = new PotionEffect(PotionEffectType.SLOW, 80, 1);
@@ -187,13 +198,26 @@ class TypedSocketModelTest {
   }
 
   @Test void selectorGridCentersRowsWithoutChangingSocketOrder() {
-    assertEquals(31, EnchantingMenuController.gridPosition(0, 1));
-    assertEquals(30, EnchantingMenuController.gridPosition(0, 3));
-    assertEquals(32, EnchantingMenuController.gridPosition(2, 3));
-    assertEquals(29, EnchantingMenuController.gridPosition(0, 7));
-    assertEquals(33, EnchantingMenuController.gridPosition(4, 7));
-    assertEquals(39, EnchantingMenuController.gridPosition(5, 7));
-    assertEquals(40, EnchantingMenuController.gridPosition(6, 7));
+    assertEquals(31, SocketMenuVisuals.gridPosition(0, 1));
+    assertEquals(30, SocketMenuVisuals.gridPosition(0, 3));
+    assertEquals(32, SocketMenuVisuals.gridPosition(2, 3));
+    assertEquals(29, SocketMenuVisuals.gridPosition(0, 7));
+    assertEquals(33, SocketMenuVisuals.gridPosition(4, 7));
+    assertEquals(39, SocketMenuVisuals.gridPosition(5, 7));
+    assertEquals(40, SocketMenuVisuals.gridPosition(6, 7));
+  }
+
+  @Test void socketGridAndFrameRenderWithoutOverlap() {
+    for (int socketSlot : SocketMenuVisuals.SOCKET_SLOTS)
+      for (int frameSlot : SocketMenuVisuals.BLACK_SLOTS)
+        assertFalse(socketSlot == frameSlot, "Socket slot " + socketSlot + " must not be a frame slot");
+    Material[] dyes = new Material[EnchantmentCategory.values().length];
+    for (EnchantmentCategory category : EnchantmentCategory.values()) {
+      Material dye = SocketMenuVisuals.dye(category);
+      for (int index = 0; index < category.ordinal(); index++)
+        assertFalse(dye == dyes[index], "Category dye colors must be unique");
+      dyes[category.ordinal()] = dye;
+    }
   }
 
   @Test void rawBooksExposeTheCenteredUniversalSocket() {
@@ -205,14 +229,34 @@ class TypedSocketModelTest {
     assertTrue(book.sockets().get(0).accepts(new LethalityEnchantment()));
   }
 
+  @Test void universalSocketsAcceptEnchantmentsThatDoNotFitTheMaterial() {
+    SocketedBookItem book = new SocketedBookItem(Material.BOOK);
+    assertTrue(book.sockets().get(0).accepts(new LethalityEnchantment(), Material.BOOK));
+    assertTrue(book.sockets().get(0).accepts(new WingedEnchantment(), Material.BOOK));
+    EnchantmentSlot fatality = EnchantmentSlot.typed(0, EnchantmentCategory.FATALITY);
+    assertTrue(fatality.accepts(new LethalityEnchantment(), Material.IRON_SWORD));
+    assertFalse(fatality.accepts(new WingedEnchantment(), Material.IRON_SWORD));
+  }
+
+  @Test void filledUniversalSocketsPresentTheEnchantmentsCategory() {
+    SocketedBookItem book = new SocketedBookItem(Material.BOOK);
+    EnchantmentSlot socket = book.sockets().get(0);
+    assertEquals(EnchantmentCategory.UNIVERSAL, socket.category());
+    assertEquals(EnchantmentCategory.FATALITY, socket.filledCategory(new LethalityEnchantment()));
+    assertEquals(EnchantmentCategory.MOBILITY, socket.filledCategory(new WingedEnchantment()));
+    assertEquals(EnchantmentCategory.TIDE, socket.filledCategory(new TestRiptide()));
+    EnchantmentSlot fatality = EnchantmentSlot.typed(0, EnchantmentCategory.FATALITY);
+    assertEquals(EnchantmentCategory.FATALITY, fatality.filledCategory(new WingedEnchantment()));
+  }
+
   @Test void registeredSocketItemsUseDedicatedOverrideTypes() {
     assertEquals("IronSword", SocketedItemOverrides.create(Material.IRON_SWORD).getClass().getSimpleName());
     assertEquals("GoldenPickaxe", SocketedItemOverrides.create(Material.GOLDEN_PICKAXE).getClass().getSimpleName());
   }
 
-  @Test void exactAllowlistExcludesWoodAndUnlistedNetheritePickaxe() {
+  @Test void exactAllowlistExcludesWoodAndIncludesConfiguredNetheriteTools() {
     assertFalse(SocketedVanillaItem.supports(Material.WOODEN_SWORD));
-    assertFalse(SocketedVanillaItem.supports(Material.NETHERITE_PICKAXE));
+    assertTrue(SocketedVanillaItem.supports(Material.NETHERITE_SHOVEL));
     assertTrue(SocketedVanillaItem.supports(Material.IRON_SWORD));
   }
 
@@ -300,7 +344,7 @@ class TypedSocketModelTest {
     assertEquals(List.of(NimbleEnchantment.SHORTBOW), SocketedVanillaItem.abilitiesFor(
       Material.BOW, List.of(new NimbleEnchantment())));
     assertEquals(AbilityUsageMethod.LEFT_CLICK, NimbleEnchantment.SHORTBOW.usageMethod());
-    assertEquals(.2D, NimbleEnchantment.SHORTBOW.cooldownSeconds());
+    assertEquals(.5D, NimbleEnchantment.SHORTBOW.cooldownSeconds());
     assertTrue(SocketedVanillaItem.abilitiesFor(Material.CROSSBOW, List.of(new NimbleEnchantment())).isEmpty());
   }
 
@@ -367,13 +411,13 @@ class TypedSocketModelTest {
     assertTrue(EnchantmentEffectsListener.wingedProtectionActive(null, true, 4_000L));
     var vertical = EnchantmentEffectsListener.wingedLaunchVelocity(
       new org.bukkit.util.Vector(.01D, -.1D, 0D), new org.bukkit.util.Vector(1D, 0D, 0D));
-    assertEquals(.01D, vertical.getX());
-    assertEquals(.75D, vertical.getY(), 0.000_001D);
+    assertEquals(0.804_984D, vertical.getX(), 0.000_001D);
+    assertEquals(0.402_492D, vertical.getY(), 0.000_001D);
     assertEquals(0D, vertical.getZ());
     var sprinting = EnchantmentEffectsListener.wingedLaunchVelocity(
       new org.bukkit.util.Vector(.05D, -.1D, 0D), new org.bukkit.util.Vector(1D, .5D, 0D));
-    assertEquals(.25D, sprinting.getX(), 0.000_001D);
-    assertEquals(.7D, sprinting.getY());
+    assertEquals(0.804_984D, sprinting.getX(), 0.000_001D);
+    assertEquals(0.402_492D, sprinting.getY(), 0.000_001D);
     assertEquals(0D, sprinting.getZ());
     assertTrue(full.startsWith("§fDouble Jump §8-"));
   }
