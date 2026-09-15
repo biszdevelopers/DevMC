@@ -23,6 +23,7 @@ public final class EnchantsPlugin extends JavaPlugin {
   private EnchantmentEffectsListener effects;
   private LinearExperienceListener experience;
   private dev.bisz.enchants.fishing.FishingManager fishing;
+  private SocketStationController stations;
   private ResourcePackHost resourcePack;
   private EnchantsConfig config;
 
@@ -52,7 +53,8 @@ public final class EnchantsPlugin extends JavaPlugin {
     getServer().getPluginManager().registerEvents(effects, this);
     fishing = new dev.bisz.enchants.fishing.FishingManager(this, config.fishing());
     getServer().getPluginManager().registerEvents(fishing, this);
-    getServer().getPluginManager().registerEvents(new GrindstoneListener(this), this);
+    stations = new SocketStationController(this);
+    getServer().getPluginManager().registerEvents(stations, this);
     experience = new LinearExperienceListener(this);
     getServer().getPluginManager().registerEvents(experience, this);
     resourcePack = new ResourcePackHost(this);
@@ -64,6 +66,7 @@ public final class EnchantsPlugin extends JavaPlugin {
   @Override public void onDisable() {
     if (menus != null) menus.dispose();
     if (effects != null) effects.dispose();
+    if (stations != null) stations.dispose();
     if (resourcePack != null) resourcePack.stop();
     CommandRegistery.unregisterAll(this);
     ItemsPlugin.instance().registry().unregisterAll(this);

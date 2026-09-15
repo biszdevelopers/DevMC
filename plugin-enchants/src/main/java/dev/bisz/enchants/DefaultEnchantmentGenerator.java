@@ -72,7 +72,8 @@ public final class DefaultEnchantmentGenerator implements EnchantmentGenerator {
     metadata.put(SocketedVanillaItem.categoryKey(), slot.category().ordinal());
     if (SocketedVanillaItem.isMending(selected))
       metadata.put(SocketedVanillaItem.mendingCountKey(), 0);
-    int level = Math.min(EnchantmentCatalog.maximumLevel(selected), 1 + extraRolls(bookshelfPercent, random));
+    int maxLevel = EnchantmentCatalog.maximumLevel(selected);
+    int level = Math.min(maxLevel, 1 + random.nextInt(Math.max(1, maxLevel)) + extraRolls(bookshelfPercent, random));
     return List.of(new EnchantmentSelection(selected, new EnchantmentData(level, metadata)));
   }
 

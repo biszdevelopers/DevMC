@@ -131,11 +131,23 @@ gold 25. Bow, crossbow, trident, fishing rod, and mace have hand-tuned costs
   - **Knockback** — melee knockback + arrow knockback (was Knockback, Punch).
   - **Acrobatics** — mace smash launch + spear reach (was Wind Burst, Lunge).
     Forward-compatible configuration; inert on 1.20.1.
-  - **Nimble** — draws, swings, and throws come faster (was Quick Charge).
-  - **Winged** — halves fall damage and grants one double jump: on toggle the
-    player is launched along their facing with a fixed upward bias
+  - **Nimble** — melee attack speed (+0.25/level), trident throw speed
+    (+10%/level), and bows become a Shortbow that fires instantly on left click
+    (was Quick Charge). Crossbows keep vanilla Quick Charge.
+  - **Winged** — halves fall damage and grants one double jump: flight is granted
+    while grounded, so a single jump-press launches the player along their
+    facing with a fixed upward bias
     (`direction.setY(0.5).normalize().multiply(0.9)`).
   - **Impact Resistance** — reduces fall, explosion, mace, and spear damage.
+- **Multishot** — pierces the single projectile to hit more targets; crossbows
+  keep the vanilla volley. No extra projectiles are spawned.
+- **Enchanting levels** — the table rolls a random level from I to the
+  enchantment's maximum (bookshelves add extra rolls).
+- **Glint** — socketed items show the enchantment glint via a hidden marker
+  enchantment, since custom enchantments are stored in ItemLib's PDC payload.
+- **Tooltips** — socket descriptions are item-specific (for example Loyalty
+  reads differently on a trident than on a fishing rod) and can be collapsed
+  per player with `/enchants tooltips collapse`.
 - **Mending** — tracked as a mend counter with tiers I–XI; each tier raises the
   durability restored per orb, and anvil repairs cost nothing.
 - **Grindstone** — stripping sockets refunds `cost.refund-percent` of the
@@ -182,13 +194,31 @@ Fishing is a deterministic, data-driven loop (`fishing.yml`):
 
 ## Commands
 
-`/enchants <give|info|xp|reload>` (permission `enchants.admin`, OP + Bundler
-`ADMIN`):
+`/enchants <give|info|xp|tooltips|reload>` (permission `enchants.admin`, OP +
+Bundler `ADMIN`):
 
 - `give <material>` — receive a socketed item.
 - `info` — inspect the sockets on the held item and its cost/refund.
 - `xp <add|set|get> [amount]` — manage linear XP.
+- `tooltips <collapse|expand|toggle>` — show or hide socket descriptions on
+  this player's item tooltips.
 - `reload` — reload the YAML configuration and rebuild the catalog.
+
+`/devenchant <namespace:id> <level> [key=value ...]` (Items) applies any
+enchantment directly and requires only operator status.
+
+## Anvil & grindstone stations
+
+Right-clicking an **anvil** or **grindstone** while holding a socketable item
+opens a socket menu. Socket buttons are color-coded by category and show the
+category name.
+
+- **Anvil** — click an empty socket to consume a matching enchanted book from
+  your inventory (cost: the item's enchant cost in levels). A **Repair** button
+  restores durability: free with Mending, otherwise one repair material plus the
+  enchant cost.
+- **Grindstone** — click a filled socket to strip only that socket, refunding
+  `cost.refund-percent` of the enchant cost as experience.
 
 ## Status / open topics
 
@@ -196,9 +226,8 @@ Fishing is a deterministic, data-driven loop (`fishing.yml`):
 - Wooden items currently have no sockets — a transitional tier.
 - Spears, the mace, and copper gear are forward-compatible config; they require
   a 1.21+ server to exist.
-- The anvil uses the vanilla interface plus Items' merge and trueMC
-  normalization rather than a bespoke menu.
-- Fishing loot tables are fully modular and will be expanded over time.
+- Nimble accelerates melee attack speed and trident throws, and turns bows into
+  a Shortbow; crossbow loading still uses vanilla Quick Charge only.
 - Applying the bundled monospace font to socket brackets still requires JSON
   chat components; the pack is hosted and sent but socket text currently uses
   the standard font.

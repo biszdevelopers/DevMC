@@ -18,7 +18,7 @@ import org.bukkit.inventory.ItemStack;
 
 /** Administrative command for the trueMC socket system. */
 final class EnchantsCommand extends DevCommand {
-  private static final String USAGE = "/enchants <give|info|xp|reload>";
+  private static final String USAGE = "/enchants <give|info|xp|tooltips|reload>";
 
   private final EnchantsPlugin plugin;
 
@@ -39,6 +39,7 @@ final class EnchantsCommand extends DevCommand {
       case "give" -> give(sender, args);
       case "info" -> info(sender);
       case "xp" -> xp(sender, args);
+      case "tooltips" -> tooltips(sender, args);
       case "reload" -> {
         plugin.reload();
         sender.sendMessage("§atrueMC configuration reloaded.");
@@ -142,6 +143,28 @@ final class EnchantsCommand extends DevCommand {
       + "§7 | Progress: §e" + current + "/" + perLevel);
   }
 
+  private void tooltips(CommandSender sender, String[] args) {
+    if (!(sender instanceof Player player)) {
+      sender.sendMessage("Only players can use this command.");
+      return;
+    }
+    if (args.length >= 2) {
+      switch (args[1].toLowerCase(java.util.Locale.ROOT)) {
+        case "collapse", "off" -> TooltipPreferences.set(player, true);
+        case "expand", "on" -> TooltipPreferences.set(player, false);
+        case "toggle" -> TooltipPreferences.toggle(player);
+        default -> {
+          sender.sendMessage("§7Usage: /enchants tooltips <collapse|expand|toggle>");
+          return;
+        }
+      }
+    } else {
+      TooltipPreferences.toggle(player);
+    }
+    sender.sendMessage("§7Socket tooltips: §f"
+      + (TooltipPreferences.collapsed(player) ? "collapsed" : "expanded"));
+  }
+
   private static int parse(String value) {
     try {
       return Integer.parseInt(value);
@@ -151,7 +174,7 @@ final class EnchantsCommand extends DevCommand {
   }
 
   @Override protected List<String> complete(CommandSender sender, String alias, String[] args) {
-    if (args.length == 1) return filter(Arrays.asList("give", "info", "xp", "reload"), args[0]);
+    if (args.length == 1) return filter(Arrays.asList("give", "info", "xp", "tooltips", "reload"), args[0]);
     if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
       List<String> materials = new ArrayList<>();
       for (Material material : Material.values()) {
@@ -160,6 +183,7 @@ final class EnchantsCommand extends DevCommand {
       return filter(materials, args[1]);
     }
     if (args.length == 2 && args[0].equalsIgnoreCase("xp")) return filter(Arrays.asList("add", "set", "get"), args[1]);
+    if (args.length == 2 && args[0].equalsIgnoreCase("tooltips")) return filter(Arrays.asList("collapse", "expand", "toggle"), args[1]);
     return List.of();
   }
 

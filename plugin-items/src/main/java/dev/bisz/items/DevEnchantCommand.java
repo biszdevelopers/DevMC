@@ -1,7 +1,6 @@
 package dev.bisz.items;
 
 import dev.bisz.commands.DevCommand;
-import dev.bisz.players.Rank;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,7 +19,7 @@ final class DevEnchantCommand extends DevCommand {
   DevEnchantCommand(ItemFactory factory, EnchantmentRegistry registry) {
     super("devenchant", "items.debug");
     this.factory = factory; this.registry = registry;
-    setUsage(USAGE); requireRank(Rank.ADMIN); requireOperator();
+    setUsage(USAGE); requireOperator();
   }
   @Override protected boolean executeCommand(CommandSender sender, String label, String[] args) {
     if (!(sender instanceof Player player)) { sender.sendMessage(message(sender, "player_only", "This command can only be used by a player.")); return true; }

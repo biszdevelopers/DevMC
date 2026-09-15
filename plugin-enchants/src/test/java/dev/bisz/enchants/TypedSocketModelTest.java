@@ -307,7 +307,7 @@ class TypedSocketModelTest {
     assertEquals(List.of(NimbleEnchantment.SHORTBOW), SocketedVanillaItem.abilitiesFor(
       Material.BOW, List.of(new NimbleEnchantment())));
     assertEquals(AbilityUsageMethod.LEFT_CLICK, NimbleEnchantment.SHORTBOW.usageMethod());
-    assertEquals(.2D, NimbleEnchantment.SHORTBOW.cooldownSeconds());
+    assertEquals(.5D, NimbleEnchantment.SHORTBOW.cooldownSeconds());
     assertTrue(SocketedVanillaItem.abilitiesFor(Material.CROSSBOW, List.of(new NimbleEnchantment())).isEmpty());
   }
 

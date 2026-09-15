@@ -6,7 +6,6 @@ import dev.bisz.items.DevItemStack;
 import dev.bisz.items.EnchantmentData;
 import dev.bisz.items.EnchantmentDisplay;
 import dev.bisz.items.RomanNumerals;
-import dev.bisz.enchants.items.SocketDisplayRenderer;
 import dev.bisz.items.ItemsPlugin;
 import dev.bisz.menus.MenuItem;
 import dev.bisz.menus.MenuSession;
@@ -28,6 +27,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -35,6 +35,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
@@ -253,8 +254,9 @@ final class EnchantingMenuController implements Listener {
   }
 
   private ItemStack emptySocket(EnchantmentSlot slot, Player viewer) {
-    boolean universal = slot.category() == EnchantmentCategory.UNIVERSAL;
-    String label = SocketDisplayRenderer.selectableEmpty(slot.category().icon(), universal, viewer);
+    String color = slot.category().color();
+    String label = color + "[ " + slot.category().icon() + " " + slot.category().displayName(viewer)
+      + " §8Empty" + color + " ]";
     return named(dye(slot.category()), label, clickToEnchantLore());
   }
 
@@ -262,7 +264,8 @@ final class EnchantingMenuController implements Listener {
       Material material, Player viewer) {
     String color = slot.category().color();
     String icon = slot.category().icon();
-    String label = color + "[ " + icon + " " + filled.getKey().properties().quality().colorCode()
+    String label = color + "[ " + icon + " " + slot.category().displayName(viewer) + ": "
+      + filled.getKey().properties().quality().colorCode()
       + filled.getKey().displayName(viewer) + " " + RomanNumerals.format(filled.getValue().level()) + color + " ]";
     ArrayList<String> lore = new ArrayList<>(
       SocketedVanillaItem.isMending(filled.getKey())
@@ -270,8 +273,12 @@ final class EnchantingMenuController implements Listener {
         : EnchantmentDisplay.renderDescription(filled.getKey(), filled.getValue(), viewer, material));
     if (!lore.isEmpty()) lore.add("");
     lore.add("§cThis socket is occupied");
-    ItemStack iconStack = named(Material.ENDER_EYE, label, lore);
+    ItemStack iconStack = named(dye(slot.category()), label, lore);
     iconStack.setAmount(Math.max(1, Math.min(64, filled.getValue().level())));
+    ItemMeta meta = iconStack.getItemMeta();
+    meta.addEnchant(Enchantment.LUCK, 1, true);
+    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+    iconStack.setItemMeta(meta);
     return iconStack;
   }
 

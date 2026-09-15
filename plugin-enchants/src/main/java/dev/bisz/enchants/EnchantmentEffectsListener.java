@@ -12,13 +12,10 @@ import dev.bisz.items.RomanNumerals;
 import dev.bisz.players.locales.Locale;
 import dev.bisz.enchants.items.InflameEnchantment;
 import dev.bisz.enchants.items.NimbleEnchantment;
-import dev.bisz.enchants.items.WingedEnchantment;
-import java.util.HashSet;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.random.RandomGenerator;
@@ -47,6 +44,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerToggleFlightEvent;
@@ -70,17 +68,12 @@ import org.bukkit.util.Vector;
 final class EnchantmentEffectsListener implements Listener {
   private static final UUID NIMBLE_MODIFIER = UUID.fromString("78b835f2-9cf0-47bb-b17d-7293e3844072");
   private final EnchantsPlugin plugin;
-  private final NamespacedKey extraProjectile;
   private final NamespacedKey projectileInflame;
   private final NamespacedKey legacyShortbowAmmo;
-  private final Set<UUID> grantedFlight = new HashSet<>();
-  private final Set<UUID> wingedFallProtection = new HashSet<>();
-  private final Map<UUID, AbilityCooldown> wingedCooldowns = new HashMap<>();
   private final Map<UUID, AbilityCooldown> shortbowCooldowns = new HashMap<>();
 
   EnchantmentEffectsListener(EnchantsPlugin plugin) {
     this.plugin = plugin;
-    extraProjectile = new NamespacedKey(plugin, "multishot_extra");
     projectileInflame = new NamespacedKey(plugin, "projectile_inflame");
     legacyShortbowAmmo = new NamespacedKey(plugin, "shortbow_ammo");
     plugin.getServer().getScheduler().runTaskTimer(plugin, this::tickPlayers, 1L, 1L);
@@ -97,42 +90,14 @@ final class EnchantmentEffectsListener implements Listener {
   void projectileLaunch(ProjectileLaunchEvent event) {
     Projectile projectile = event.getEntity();
     if (!(projectile.getShooter() instanceof Player player)) return;
-    int penetration = level(player.getInventory().getItemInMainHand(), "penetration");
-    if (penetration > 0 && projectile instanceof AbstractArrow arrow) arrow.setPierceLevel(Math.min(127, penetration));
-  }
-
-  @EventHandler(ignoreCancelled = true)
-  void multishot(EntityShootBowEvent event) {
-    if (!(event.getEntity() instanceof Player player) || !(event.getProjectile() instanceof AbstractArrow original)) return;
-    if (original.getPersistentDataContainer().has(extraProjectile, PersistentDataType.BYTE)) return;
-    ItemStack weapon = event.getBow();
-    if (weapon == null || weapon.getType().name().equals("CROSSBOW") || level(weapon, "multishot") == 0) return;
-    spawnMultishotExtras(original, player, weapon);
-  }
-
-  private void spawnMultishotExtras(AbstractArrow original, Player player, ItemStack weapon) {
-    for (double degrees : new double[] {-10D, 10D}) {
-      Vector velocity = rotateY(original.getVelocity(), Math.toRadians(degrees));
-      AbstractArrow extra;
-      if (original instanceof SpectralArrow) {
-        extra = original.getWorld().spawn(original.getLocation(), SpectralArrow.class);
-        extra.setVelocity(velocity);
-      } else {
-        Arrow copied = original.getWorld().spawnArrow(original.getLocation(), velocity.clone().normalize(), (float) velocity.length(), 0F);
-        if (original instanceof Arrow source) {
-          copied.setBasePotionData(source.getBasePotionData());
-          source.getCustomEffects().forEach(effect -> copied.addCustomEffect(effect, true));
-          copied.setColor(source.getColor());
-        }
-        extra = copied;
-      }
-      extra.setShooter(player);
-      extra.setDamage(original.getDamage());
-      extra.setCritical(original.isCritical());
-      extra.setFireTicks(original.getFireTicks());
-      extra.getPersistentDataContainer().set(extraProjectile, PersistentDataType.BYTE, (byte) 1);
-      configureBowArrow(extra, player, weapon);
-    }
+    ItemStack weapon = player.getInventory().getItemInMainHand();
+    int penetration = level(weapon, "penetration");
+    int multishot = level(weapon, "multishot");
+    int pierce = Math.max(penetration, multishot);
+    if (pierce > 0 && projectile instanceof AbstractArrow arrow) arrow.setPierceLevel(Math.min(127, pierce));
+    int nimble = level(weapon, "nimble");
+    if (nimble > 0 && projectile.getType() == org.bukkit.entity.EntityType.TRIDENT)
+      projectile.setVelocity(projectile.getVelocity().multiply(1D + .1D * nimble));
   }
 
   @EventHandler(ignoreCancelled = true)
@@ -185,7 +150,6 @@ final class EnchantmentEffectsListener implements Listener {
     arrow.setVelocity(player.getEyeLocation().getDirection().normalize().multiply(3D));
     arrow.setCritical(true);
     configureBowArrow(arrow, player, bow);
-    if (level(bow, "multishot") > 0) spawnMultishotExtras(arrow, player, bow);
     if (player.getGameMode() != GameMode.CREATIVE) consumeShortbowAmmo(player, ammo);
     damageItem(player, EquipmentSlot.HAND, bow, ThreadLocalRandom.current());
     shortbowCooldowns.put(player.getUniqueId(), AbilityCooldown.start(NimbleEnchantment.SHORTBOW, now));
@@ -326,28 +290,33 @@ final class EnchantmentEffectsListener implements Listener {
     if (isNimbleBow(event.getOffHandItem())) event.setCancelled(true);
   }
 
-  @EventHandler(ignoreCancelled = true)
-  void doubleJump(PlayerToggleFlightEvent event) {
+  /**
+   * trueMC's Winged activation: while winged boots are worn, flight is granted
+   * whenever the player is on the ground, so a single jump-press consumes it.
+   */
+  @SuppressWarnings("deprecation")
+  @EventHandler
+  void wingedMove(PlayerMoveEvent event) {
     Player player = event.getPlayer();
-    if (!grantedFlight.contains(player.getUniqueId())
-      || cooldownActive(wingedCooldowns, player, System.currentTimeMillis())) return;
-    event.setCancelled(true);
-    player.setFlying(false);
-    player.setAllowFlight(false);
-    grantedFlight.remove(player.getUniqueId());
-    wingedCooldowns.put(player.getUniqueId(), AbilityCooldown.start(
-      WingedEnchantment.DOUBLE_JUMP, System.currentTimeMillis()));
-    player.setFallDistance(0F);
-    wingedFallProtection.add(player.getUniqueId());
-    player.setVelocity(wingedLaunchVelocity(player.getVelocity(), player.getLocation().getDirection()));
+    if (!survival(player)) return;
+    if (level(player.getInventory().getBoots(), "winged") > 0) {
+      if (player.isOnGround()) player.setAllowFlight(true);
+    } else if (player.getAllowFlight() && !player.isFlying()) {
+      player.setAllowFlight(false);
+    }
   }
 
-  @EventHandler(ignoreCancelled = true)
-  void preventWingedFallDamage(EntityDamageEvent event) {
-    if (event.getCause() != EntityDamageEvent.DamageCause.FALL || !(event.getEntity() instanceof Player player)) return;
-    if (level(player.getInventory().getBoots(), "winged") == 0) return;
-    if (wingedProtectionActive(wingedCooldowns.get(player.getUniqueId()),
-      wingedFallProtection.contains(player.getUniqueId()), System.currentTimeMillis())) event.setCancelled(true);
+  @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+  void wingedToggle(PlayerToggleFlightEvent event) {
+    Player player = event.getPlayer();
+    if (!survival(player)) return;
+    if (level(player.getInventory().getBoots(), "winged") <= 0) return;
+    if (!event.isFlying()) return;
+    event.setCancelled(true);
+    player.setAllowFlight(false);
+    player.setFlying(false);
+    player.setFallDistance(0F);
+    player.setVelocity(wingedLaunchVelocity(player.getVelocity(), player.getLocation().getDirection()));
   }
 
   /** Channeling boosts the lightning damage of nearby trident/rod holders. */
@@ -386,31 +355,14 @@ final class EnchantmentEffectsListener implements Listener {
       updateAbilityActionBar(player, now);
       updateNimble(player);
       if (!survival(player)) {
-        cleanupFlight(player);
-        wingedCooldowns.remove(player.getUniqueId());
         shortbowCooldowns.remove(player.getUniqueId());
         removeNimble(player);
-        continue;
-      }
-      if (level(player.getInventory().getBoots(), "winged") == 0) {
-        cleanupFlight(player);
-        wingedFallProtection.remove(player.getUniqueId());
-        wingedCooldowns.remove(player.getUniqueId());
-        continue;
-      }
-      if (player.isOnGround()) {
-        cleanupFlight(player);
-        wingedFallProtection.remove(player.getUniqueId());
-      } else if (!cooldownActive(wingedCooldowns, player, now) && !player.getAllowFlight()) {
-        player.setAllowFlight(true);
-        grantedFlight.add(player.getUniqueId());
       }
     }
   }
 
   private void updateAbilityActionBar(Player player, long now) {
-    List<String> entries = new ArrayList<>(2);
-    appendCooldownActionBar(entries, wingedCooldowns, player, now);
+    List<String> entries = new ArrayList<>(1);
     appendCooldownActionBar(entries, shortbowCooldowns, player, now);
     if (!entries.isEmpty()) sendActionBar(player, Ability.joinActionBars(entries));
   }
@@ -560,10 +512,10 @@ final class EnchantmentEffectsListener implements Listener {
     int level = level(player.getInventory().getItemInMainHand(), "nimble");
     AttributeModifier current = attribute.getModifiers().stream()
       .filter(modifier -> modifier.getUniqueId().equals(NIMBLE_MODIFIER)).findFirst().orElse(null);
-    double amount = level * .10D;
+    double amount = level * .25D;
     if (current != null && level > 0 && Double.compare(current.getAmount(), amount) == 0) return;
     if (current != null) attribute.removeModifier(current);
-    if (level > 0) attribute.addModifier(new AttributeModifier(NIMBLE_MODIFIER, "enchants-nimble", level * .10D, AttributeModifier.Operation.MULTIPLY_SCALAR_1));
+    if (level > 0) attribute.addModifier(new AttributeModifier(NIMBLE_MODIFIER, "enchants-nimble", amount, AttributeModifier.Operation.ADD_NUMBER));
   }
 
   private int level(ItemStack item, String path) {
@@ -579,22 +531,12 @@ final class EnchantmentEffectsListener implements Listener {
   }
 
   private void cleanup(Player player) {
-    cleanupFlight(player);
     removeNimble(player);
-    wingedFallProtection.remove(player.getUniqueId());
-    wingedCooldowns.remove(player.getUniqueId());
     shortbowCooldowns.remove(player.getUniqueId());
-  }
-  private void cleanupFlight(Player player) {
-    if (grantedFlight.remove(player.getUniqueId()) && survival(player)) player.setAllowFlight(false);
   }
   @SuppressWarnings("deprecation") private void removeNimble(Player player) {
     AttributeInstance attribute = player.getAttribute(Attribute.GENERIC_ATTACK_SPEED);
     if (attribute != null) attribute.getModifiers().stream().filter(modifier -> modifier.getUniqueId().equals(NIMBLE_MODIFIER)).findFirst().ifPresent(attribute::removeModifier);
   }
   private static boolean survival(Player player) { return player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE; }
-  private static Vector rotateY(Vector vector, double angle) {
-    double cos = Math.cos(angle), sin = Math.sin(angle);
-    return new Vector(vector.getX() * cos - vector.getZ() * sin, vector.getY(), vector.getX() * sin + vector.getZ() * cos);
-  }
 }
