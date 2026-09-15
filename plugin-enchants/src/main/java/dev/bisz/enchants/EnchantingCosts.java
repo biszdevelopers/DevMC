@@ -6,8 +6,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.random.RandomGenerator;
 import org.bukkit.Material;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
 
 /** Config-driven material costs, refunds, and constant per-item enchant prices. */
 final class EnchantingCosts {
@@ -29,25 +27,31 @@ final class EnchantingCosts {
   }
 
   static EnchantingCosts load(EnchantsConfig config) {
-    FileConfiguration costs = config.costs();
-    FileConfiguration main = config.config();
-    return new EnchantingCosts(
-      section(costs, "materials"),
-      section(costs, "items"),
-      main.getDouble("cost.multiplier", 1.0),
-      main.getInt("cost.refund-percent", 80),
-      main.getInt("enchanting.lapis-cost", 3));
-  }
-
-  static EnchantingCosts from(Map<String, Object> values) {
     Map<String, Integer> materials = new HashMap<>();
     Map<String, Integer> items = new HashMap<>();
-    for (Map.Entry<String, Object> entry : values.entrySet()) {
-      if (entry.getValue() instanceof Number number) {
-        materials.put(entry.getKey().toLowerCase(Locale.ROOT), number.intValue());
-      }
+    Map<String, Object> costs = config.costs();
+    Map<String, Object> configuredMaterials = EnchantsConfig.section(costs, "materials");
+    Map<String, Object> configuredItems = EnchantsConfig.section(costs, "items");
+    if (configuredMaterials.isEmpty() && configuredItems.isEmpty()) {
+      // Legacy flat costs.json stores every tier and item override together.
+      numeric(costs, materials);
+    } else {
+      numeric(configuredMaterials, materials);
+      numeric(configuredItems, items);
     }
-    return new EnchantingCosts(materials, items, 1.0, 80, 3);
+    Map<String, Object> main = config.config();
+    return new EnchantingCosts(
+      materials,
+      items,
+      EnchantsConfig.decimal(main, "cost.multiplier", 1.0),
+      EnchantsConfig.integer(main, "cost.refund-percent", 80),
+      EnchantsConfig.integer(main, "enchanting.lapis-cost", 3));
+  }
+
+  private static void numeric(Map<String, Object> values, Map<String, Integer> target) {
+    values.forEach((key, value) -> {
+      if (value instanceof Number number) target.put(key.toLowerCase(Locale.ROOT), number.intValue());
+    });
   }
 
   /** The constant level cost of enchanting one socket on this item. */
@@ -55,6 +59,7 @@ final class EnchantingCosts {
     Objects.requireNonNull(material, "material");
     String exact = material.getKey().getKey().toLowerCase(Locale.ROOT);
     Integer configured = items.get(exact);
+    if (configured == null) configured = materials.get(exact);
     if (configured == null) configured = materials.get(tier(material, exact));
     if (configured == null) configured = materials.getOrDefault("default", 0);
     return clampCost((int) Math.round(configured * multiplier));
@@ -71,16 +76,6 @@ final class EnchantingCosts {
 
   static OfferCost roll(int materialCost, RandomGenerator random) {
     return new OfferCost(clampCost(materialCost), 1);
-  }
-
-  private static Map<String, Integer> section(FileConfiguration config, String path) {
-    Map<String, Integer> values = new HashMap<>();
-    ConfigurationSection root = config.getConfigurationSection(path);
-    if (root == null) return values;
-    for (String key : root.getKeys(false)) {
-      values.put(key.toLowerCase(Locale.ROOT), root.getInt(key));
-    }
-    return values;
   }
 
   private static int clampCost(int value) { return Math.max(0, Math.min(25, value)); }

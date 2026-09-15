@@ -50,10 +50,12 @@ Normal enchantments are ordered by quality descending, level descending, then
 localized name. Their names use the enchantment quality color. Descriptions are
 shown when no more than five enchantments are present.
 
-Typed socket brackets and icons use the socket category color. The enchantment
-name uses its quality color, followed by its Roman-numeral level. Empty sockets
-are compact consecutive lines. Filled sockets include their wrapped description
-and begin a distinct block when earlier socket content exists.
+Filled socket brackets and icons use the socket category color — a filled
+universal socket uses the placed enchantment's category — while empty sockets
+render gray (§7). The enchantment name uses its quality color, followed
+by its Roman-numeral level. Empty sockets are compact consecutive lines. Filled
+sockets include their wrapped description and begin a distinct block when
+earlier socket content exists.
 
 Efficiency is the only enchantment that may occupy repeated sockets. Each copy
 keeps its own socket line and level, while the underlying Efficiency level is

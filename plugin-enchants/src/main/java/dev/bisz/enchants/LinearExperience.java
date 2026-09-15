@@ -5,7 +5,7 @@ import org.bukkit.entity.Player;
 /** Player experience represented by a configurable constant points per level. */
 public final class LinearExperience {
   /** trueMC's default linear cost, read from {@code xp.points-per-level}. */
-  public static final int DEFAULT_POINTS_PER_LEVEL = 100;
+  public static final int DEFAULT_POINTS_PER_LEVEL = 20;
 
   private static int pointsPerLevel = DEFAULT_POINTS_PER_LEVEL;
 

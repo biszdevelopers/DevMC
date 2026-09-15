@@ -98,8 +98,9 @@ final class EnchantsCommand extends DevCommand {
         String suffix = filled == null ? "§8empty"
           : filled.getKey().properties().quality().colorCode() + filled.getKey().displayName(player)
             + " " + RomanNumerals.format(filled.getValue().level());
-        sender.sendMessage("  " + socket.category().color() + "[" + socket.category().icon() + " "
-          + socket.category().displayName(player) + "§r] §7> " + suffix);
+        EnchantmentCategory display = filled == null ? socket.category() : socket.filledCategory(filled.getKey());
+        sender.sendMessage("  " + display.color() + "[" + display.icon() + " "
+          + display.displayName(player) + "§r] §7> " + suffix);
       }
       sender.sendMessage("§7Cost: §e" + plugin.enchantingCosts().materialCost(held.getType())
         + "§7 levels | Refund: §e" + plugin.enchantingCosts().refund(held.getType()) + "§7 levels");

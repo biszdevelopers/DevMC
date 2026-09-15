@@ -12,10 +12,13 @@ import dev.bisz.items.RomanNumerals;
 import dev.bisz.players.locales.Locale;
 import dev.bisz.enchants.items.InflameEnchantment;
 import dev.bisz.enchants.items.NimbleEnchantment;
+import dev.bisz.enchants.items.WingedEnchantment;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.random.RandomGenerator;
@@ -70,6 +73,8 @@ final class EnchantmentEffectsListener implements Listener {
   private final EnchantsPlugin plugin;
   private final NamespacedKey projectileInflame;
   private final NamespacedKey legacyShortbowAmmo;
+  private final Set<UUID> wingedFallProtection = new HashSet<>();
+  private final Map<UUID, AbilityCooldown> wingedCooldowns = new HashMap<>();
   private final Map<UUID, AbilityCooldown> shortbowCooldowns = new HashMap<>();
 
   EnchantmentEffectsListener(EnchantsPlugin plugin) {
@@ -300,7 +305,8 @@ final class EnchantmentEffectsListener implements Listener {
     Player player = event.getPlayer();
     if (!survival(player)) return;
     if (level(player.getInventory().getBoots(), "winged") > 0) {
-      if (player.isOnGround()) player.setAllowFlight(true);
+      if (player.isOnGround() && !cooldownActive(wingedCooldowns, player, System.currentTimeMillis()))
+        player.setAllowFlight(true);
     } else if (player.getAllowFlight() && !player.isFlying()) {
       player.setAllowFlight(false);
     }
@@ -313,10 +319,23 @@ final class EnchantmentEffectsListener implements Listener {
     if (level(player.getInventory().getBoots(), "winged") <= 0) return;
     if (!event.isFlying()) return;
     event.setCancelled(true);
-    player.setAllowFlight(false);
     player.setFlying(false);
+    player.setAllowFlight(false);
+    if (cooldownActive(wingedCooldowns, player, System.currentTimeMillis())) return;
+    long now = System.currentTimeMillis();
+    wingedCooldowns.put(player.getUniqueId(), AbilityCooldown.start(WingedEnchantment.DOUBLE_JUMP, now));
+    wingedFallProtection.add(player.getUniqueId());
     player.setFallDistance(0F);
     player.setVelocity(wingedLaunchVelocity(player.getVelocity(), player.getLocation().getDirection()));
+  }
+
+  /** Cancels fall damage during the double jump and its three-second cooldown. */
+  @EventHandler(ignoreCancelled = true)
+  void preventWingedFallDamage(EntityDamageEvent event) {
+    if (event.getCause() != EntityDamageEvent.DamageCause.FALL || !(event.getEntity() instanceof Player player)) return;
+    if (level(player.getInventory().getBoots(), "winged") == 0) return;
+    if (wingedProtectionActive(wingedCooldowns.get(player.getUniqueId()),
+      wingedFallProtection.contains(player.getUniqueId()), System.currentTimeMillis())) event.setCancelled(true);
   }
 
   /** Channeling boosts the lightning damage of nearby trident/rod holders. */
@@ -354,15 +373,26 @@ final class EnchantmentEffectsListener implements Listener {
       long now = System.currentTimeMillis();
       updateAbilityActionBar(player, now);
       updateNimble(player);
+      UUID id = player.getUniqueId();
       if (!survival(player)) {
-        shortbowCooldowns.remove(player.getUniqueId());
+        wingedFallProtection.remove(id);
+        wingedCooldowns.remove(id);
+        shortbowCooldowns.remove(id);
         removeNimble(player);
+        continue;
       }
+      if (level(player.getInventory().getBoots(), "winged") == 0) {
+        wingedFallProtection.remove(id);
+        wingedCooldowns.remove(id);
+        continue;
+      }
+      if (player.isOnGround()) wingedFallProtection.remove(id);
     }
   }
 
   private void updateAbilityActionBar(Player player, long now) {
-    List<String> entries = new ArrayList<>(1);
+    List<String> entries = new ArrayList<>(2);
+    appendCooldownActionBar(entries, wingedCooldowns, player, now);
     appendCooldownActionBar(entries, shortbowCooldowns, player, now);
     if (!entries.isEmpty()) sendActionBar(player, Ability.joinActionBars(entries));
   }
@@ -532,6 +562,8 @@ final class EnchantmentEffectsListener implements Listener {
 
   private void cleanup(Player player) {
     removeNimble(player);
+    wingedFallProtection.remove(player.getUniqueId());
+    wingedCooldowns.remove(player.getUniqueId());
     shortbowCooldowns.remove(player.getUniqueId());
   }
   @SuppressWarnings("deprecation") private void removeNimble(Player player) {

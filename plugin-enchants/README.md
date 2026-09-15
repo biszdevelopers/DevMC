@@ -3,8 +3,10 @@
 trueMC's custom enchanting, socket, XP, and fishing system, integrated with the
 DevMC **Bundler** and **Items** plugins on Spigot 1.20.1.
 
-Socket layouts, the enchantment catalog, costs, and fishing loot are
-config-driven YAML resources. Item state is stored through the Items PDC.
+Socket layouts and the enchantment catalog are hardcoded Java tables; costs,
+fishing loot, and display/XP settings are JSON-backed through Bundler's
+ServerData store (`D:/ServerData/enchants`). Item state is stored through the
+Items PDC.
 
 See [docs/enchanting.md](../docs/enchanting.md) for the full specification.
 

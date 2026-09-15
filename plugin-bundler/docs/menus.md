@@ -111,6 +111,25 @@ Passing the Bukkit `Inventory` directly remains supported and automatically crea
 the same adapter. `storageSlot` and `readOnlyStorageSlot` also remain as compatibility
 aliases for `storageIndex` and `readOnlyStorageIndex`.
 
+### Storage placeholders
+
+A static item placed on a storage-mapped slot becomes that cell's **placeholder**:
+it renders whenever the mapped provider index is empty and is replaced by the stored
+item as soon as one exists. Placeholders are display-only decoration; they are never
+written to the provider, picked up, or returned on close. Declare the mapping before
+or after the item, in any order:
+
+```java
+SinglePageMenuTemplate sockets = SinglePageMenuTemplate.builder("Sockets", 6)
+    .storageIndex(29, 0)
+    .item(29, MenuItem.builder(Material.RED_DYE).name("§cEmpty socket").build())
+    .onStorageChange(context -> usePlacedItem(context.item()))
+    .build();
+```
+
+Placeholders are currently honored by `SinglePageMenuTemplate`; paginated storage
+templates map their viewport cells per page and ignore them.
+
 A specialized provider can obtain its displayed stacks from another data source:
 
 ```java

@@ -1,16 +1,17 @@
 package dev.bisz.enchants;
 
 import dev.bisz.bundler.BundlerPlugin;
+import dev.bisz.chat.ChatUtils;
 import dev.bisz.items.DevEnchantment;
 import dev.bisz.items.DevItemStack;
 import dev.bisz.items.EnchantmentData;
-import dev.bisz.items.EnchantmentDisplay;
 import dev.bisz.items.ItemsPlugin;
 import dev.bisz.items.RomanNumerals;
 import dev.bisz.menus.MenuItem;
 import dev.bisz.menus.MenuSession;
 import dev.bisz.menus.SinglePageMenuTemplate;
 import dev.bisz.menus.StorageProvider;
+import dev.bisz.players.locales.Locale;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -33,14 +34,21 @@ import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 
 /**
- * trueMC's anvil and grindstone stations. Right-clicking either block while
- * holding a socketable item opens a socket menu: the anvil applies enchanted
- * books (and repairs), while the grindstone strips a single chosen socket.
+ * trueMC's anvil and grindstone stations. Right-clicking either block opens the
+ * trueMC socket menu, which mirrors the enchanting table: the item rests in a
+ * storage cell, empty sockets render as category dyes, and filled sockets
+ * render as ender eyes. The anvil turns an enchanted book placed on an empty
+ * socket into that socket's enchantment, while the grindstone strips a clicked
+ * socket and refunds experience.
  */
 final class SocketStationController implements Listener {
-  private static final int ITEM_SLOT = 4;
-  private static final int CLOSE_SLOT = 49;
+  private static final int ICON_SLOT = 4;
+  private static final int ITEM_SLOT = 22;
   private static final int REPAIR_SLOT = 48;
+  private static final int CLOSE_SLOT = 49;
+  private static final int INFO_SLOT = 50;
+  private static final int SOCKET_STORAGE_BASE = 1;
+  private static final int SOCKET_STORAGE_SIZE = SocketMenuVisuals.SOCKET_SLOTS.length;
 
   private final EnchantsPlugin plugin;
   private final Map<UUID, Station> stations = new LinkedHashMap<>();
@@ -63,231 +71,354 @@ final class SocketStationController implements Listener {
     if (block == null) return;
     StationType type = StationType.of(block.getType());
     if (type == null) return;
-    ItemStack held = event.getPlayer().getInventory().getItemInMainHand();
-    if (!socketable(held)) return;
     event.setCancelled(true);
-    open(event.getPlayer(), type, held.clone());
+    open(event.getPlayer(), type);
   }
 
-  private void open(Player player, StationType type, ItemStack item) {
-    Station station = new Station(player, type, item);
+  private void open(Player player, StationType type) {
+    Station station = new Station(player, type);
     SinglePageMenuTemplate.Builder builder = SinglePageMenuTemplate.builder(
-      viewer -> type.title, 6);
+      viewer -> Locale.get(viewer, type.titleKey()), 6);
     for (int slot = 0; slot < 54; slot++) builder.item(slot, filler());
+    for (int slot : SocketMenuVisuals.BLACK_SLOTS) builder.item(slot, filler(Material.BLACK_STAINED_GLASS_PANE));
+    builder.item(ICON_SLOT, MenuItem.builder(type.icon())
+      .localizedName(type.nameKey())
+      .wrappedLocalizedLore(type.descriptionKey())
+      .build());
     builder.storageIndex(ITEM_SLOT, 0);
-    builder.item(ITEM_SLOT, MenuItem.dynamic(viewer -> {
-      ItemStack stored = station.storage.getItem(0);
-      return stored == null ? grayPane() : stored;
-    }).onClick(context -> {}));
+    builder.removeItem(ITEM_SLOT);
     if (type == StationType.ANVIL) {
       builder.item(REPAIR_SLOT, MenuItem.builder(Material.ANVIL)
-        .name("§eRepair")
-        .lore("§7Restore the item to full durability.", "§7Mending items repair for free.")
+        .localizedName("enchants.station.repair.name")
+        .wrappedLocalizedLore("enchants.station.repair.description")
+        .lore(viewer -> repairCostLore(station, viewer))
         .onClick(context -> {
           repair(station);
           context.session().refresh();
         })
         .build());
     }
+    builder.item(INFO_SLOT, MenuItem.builder(Material.KNOWLEDGE_BOOK)
+      .localizedName("enchants.station.info.name")
+      .wrappedLocalizedLore(type.infoKey())
+      .build());
     builder.item(CLOSE_SLOT, MenuItem.builder(Material.BARRIER)
       .localizedName("locale.menu.close")
       .onClick(context -> context.session().close())
       .build());
-    for (int index = 0; index < station.sockets(); index++) {
-      int socket = index;
-      int gridSlot = EnchantingMenuController.gridPosition(index, station.sockets());
-      builder.item(gridSlot, MenuItem.dynamic(viewer -> renderSocket(station, socket, viewer))
-        .onClick(context -> {
-          click(station, socket);
-          context.session().refresh();
-        }));
+    for (int position = 0; position < SOCKET_STORAGE_SIZE; position++) {
+      int gridSlot = SocketMenuVisuals.SOCKET_SLOTS[position];
+      if (type == StationType.ANVIL) {
+        builder.storageIndex(gridSlot, SOCKET_STORAGE_BASE + position);
+        builder.item(gridSlot, MenuItem.dynamic(viewer -> renderAnvilSocket(station, gridSlot, viewer)));
+      } else {
+        builder.item(gridSlot, MenuItem.dynamic(viewer -> renderGrindstoneSocket(station, gridSlot, viewer))
+          .onClick(context -> {
+            strip(station, gridSlot);
+            context.session().refresh();
+          }));
+      }
     }
+    builder.onStorageChange(context -> storageChanged(station, context.storageIndex(), context.item()));
     builder.onClose(context -> finish(station));
     station.session = BundlerPlugin.instance().menuManager().open(player, builder.build(), station.storage);
     stations.put(player.getUniqueId(), station);
     player.playSound(player.getLocation(), Sound.BLOCK_ANVIL_USE, .6F, type == StationType.ANVIL ? 1F : .7F);
   }
 
-  private void click(Station station, int socket) {
+  private void storageChanged(Station station, int storageIndex, ItemStack placed) {
     if (station.finished) return;
-    DevItemStack stack = station.wrap();
-    if (stack == null || !(stack.definition() instanceof SocketedVanillaItem definition)) return;
-    Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned = definition.normalize(stack);
-    if (station.type == StationType.GRINDSTONE) {
-      strip(station, definition, stack, socket, assigned);
-    } else {
-      enchantWithBook(station, definition, stack, socket, assigned);
+    if (storageIndex == 0) {
+      itemChanged(station);
+      return;
     }
-    stack.render(station.player);
-    station.storage.setItem(0, stack.bukkitStack());
+    int position = storageIndex - SOCKET_STORAGE_BASE;
+    if (position < 0 || position >= SOCKET_STORAGE_SIZE) return;
+    int gridSlot = SocketMenuVisuals.SOCKET_SLOTS[position];
+    station.storage.setItem(storageIndex, null);
+    if (station.type != StationType.ANVIL) {
+      giveOrDrop(station.player, placed);
+      return;
+    }
+    applyBook(station, gridSlot, placed);
   }
 
-  private void enchantWithBook(
-    Station station, SocketedVanillaItem definition, DevItemStack stack, int socket,
-    Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned
-  ) {
+  private void itemChanged(Station station) {
+    ItemStack item = station.storage.item();
+    if (item != null && item.getAmount() > 1) {
+      ItemStack surplus = item.clone();
+      surplus.setAmount(item.getAmount() - 1);
+      item.setAmount(1);
+      station.storage.setItem(0, item);
+      giveOrDrop(station.player, surplus);
+    }
+    ItemStack stored = station.storage.item();
+    if (stored != null && !SocketedVanillaItem.supports(stored.getType())) {
+      giveOrDrop(station.player, stored);
+      station.storage.setItem(0, null);
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.item.invalid"));
+    }
+    station.storage.takeSockets().forEach(leftover -> giveOrDrop(station.player, leftover));
+  }
+
+  private void applyBook(Station station, int gridSlot, ItemStack placed) {
+    if (placed == null || placed.getType() != Material.ENCHANTED_BOOK) {
+      giveOrDrop(station.player, placed);
+      return;
+    }
+    ItemStack item = station.storage.item();
+    if (item == null) {
+      giveOrDrop(station.player, placed);
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.need_item"));
+      return;
+    }
+    ItemStack target = item;
+    if (target.getType() == Material.BOOK) {
+      target = target.clone();
+      target.setType(Material.ENCHANTED_BOOK);
+    }
+    DevItemStack stack = wrap(target);
+    if (stack == null || !(stack.definition() instanceof SocketedVanillaItem definition)) {
+      giveOrDrop(station.player, placed);
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.need_item"));
+      return;
+    }
+    Integer socket = SocketMenuVisuals.socketAt(target, gridSlot);
+    if (socket == null) {
+      giveOrDrop(station.player, placed);
+      return;
+    }
+    Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned = definition.normalize(stack);
     if (assigned.containsKey(socket)) {
-      station.player.sendMessage("§cThat socket is already enchanted.");
+      giveOrDrop(station.player, placed);
+      reject(station, "enchants.station.socket.occupied");
       return;
     }
     EnchantmentSlot slot = definition.sockets().get(socket);
-    int cost = plugin.enchantingCosts().materialCost(stack.bukkitStack().getType());
+    int cost = plugin.enchantingCosts().materialCost(target.getType());
     if (station.player.getLevel() < cost) {
-      station.player.sendMessage("§cYou need " + cost + " levels.");
+      giveOrDrop(station.player, placed);
+      reject(station, "enchants.station.need_levels", cost);
       return;
     }
-    ItemStack[] contents = station.player.getInventory().getStorageContents();
-    for (int index = 0; index < contents.length; index++) {
-      ItemStack candidate = contents[index];
-      if (candidate == null || candidate.getType() != Material.ENCHANTED_BOOK) continue;
-      DevItemStack book = ItemsPlugin.instance().factory().wrap(candidate);
-      for (Map.Entry<DevEnchantment, EnchantmentData> entry : book.enchantmentData().entrySet()) {
-        DevEnchantment enchantment = entry.getKey();
-        if (EnchantmentCatalog.category(enchantment) != slot.category()) continue;
-        if (!EnchantmentCatalog.applicable(enchantment, stack.bukkitStack().getType())) continue;
-        Map<NamespacedKey, Object> metadata = new HashMap<>(entry.getValue().metadata());
-        metadata.put(SocketedVanillaItem.slotKey(), socket);
-        metadata.put(SocketedVanillaItem.categoryKey(), slot.category().ordinal());
-        try {
-          definition.applySocketEnchantment(stack, enchantment,
-            new EnchantmentData(entry.getValue().level(), metadata));
-        } catch (RuntimeException exception) {
-          continue;
-        }
-        if (candidate.getAmount() > 1) candidate.setAmount(candidate.getAmount() - 1);
-        else contents[index] = null;
-        station.player.getInventory().setStorageContents(contents);
-        LinearExperience.removeLevels(station.player, cost);
-        station.player.playSound(station.player.getLocation(), Sound.BLOCK_ANVIL_USE, .8F, 1.2F);
-        return;
-      }
+    DevItemStack book = wrap(placed);
+    if (book == null) {
+      giveOrDrop(station.player, placed);
+      return;
     }
-    station.player.sendMessage("§cNo matching enchanted book for that socket.");
+    for (Map.Entry<DevEnchantment, EnchantmentData> entry : book.enchantmentData().entrySet()) {
+      DevEnchantment enchantment = entry.getKey();
+      if (!slot.accepts(enchantment, target.getType())) continue;
+      Map<NamespacedKey, Object> metadata = new HashMap<>(entry.getValue().metadata());
+      metadata.put(SocketedVanillaItem.slotKey(), socket);
+      metadata.put(SocketedVanillaItem.categoryKey(), slot.category().ordinal());
+      try {
+        definition.applySocketEnchantment(stack, enchantment,
+          new EnchantmentData(entry.getValue().level(), metadata));
+      } catch (RuntimeException exception) {
+        continue;
+      }
+      if (placed.getAmount() > 1) {
+        ItemStack surplus = placed.clone();
+        surplus.setAmount(placed.getAmount() - 1);
+        giveOrDrop(station.player, surplus);
+      }
+      LinearExperience.removeLevels(station.player, cost);
+      stack.render(station.player);
+      station.storage.setItem(0, stack.bukkitStack());
+      station.player.playSound(station.player.getLocation(), Sound.BLOCK_ANVIL_USE, .8F, 1.2F);
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.socket.applied",
+        enchantment.displayName(station.player), RomanNumerals.format(entry.getValue().level())));
+      return;
+    }
+    giveOrDrop(station.player, placed);
+    reject(station, "enchants.station.socket.no_match");
   }
 
-  private void strip(
-    Station station, SocketedVanillaItem definition, DevItemStack stack, int socket,
-    Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned
-  ) {
-    if (!assigned.containsKey(socket)) {
-      station.player.sendMessage("§7That socket is empty.");
+  private void strip(Station station, int gridSlot) {
+    ItemStack item = station.storage.item();
+    DevItemStack stack = wrap(item);
+    if (stack == null || !(stack.definition() instanceof SocketedVanillaItem definition)) return;
+    Integer socket = SocketMenuVisuals.socketAt(item, gridSlot);
+    if (socket == null) return;
+    if (!definition.normalize(stack).containsKey(socket)) {
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.socket.nothing_to_strip"));
       return;
     }
     definition.removeSocket(stack, socket);
-    int refund = plugin.enchantingCosts().refund(stack.bukkitStack().getType());
+    stack.render(station.player);
+    station.storage.setItem(0, stack.bukkitStack());
+    int refund = plugin.enchantingCosts().refund(item.getType());
     if (refund > 0) LinearExperience.addPoints(station.player, refund * LinearExperience.pointsPerLevel());
     station.player.playSound(station.player.getLocation(), Sound.BLOCK_GRINDSTONE_USE, .8F, 1F);
   }
 
   private void repair(Station station) {
-    DevItemStack stack = station.wrap();
-    if (stack == null) return;
-    ItemStack item = stack.bukkitStack();
-    ItemMeta meta = item.getItemMeta();
-    if (!(meta instanceof Damageable damageable) || damageable.getDamage() <= 0) {
-      station.player.sendMessage("§7This item is at full durability.");
+    ItemStack item = station.storage.item();
+    if (item == null) {
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.need_item"));
       return;
     }
-    boolean mending = stack.enchantmentData().keySet().stream().anyMatch(SocketedVanillaItem::isMending);
-    if (!mending) {
-      Material material = repairMaterial(item.getType());
-      int cost = plugin.enchantingCosts().materialCost(item.getType());
-      if (material == null) {
-        station.player.sendMessage("§cThis item cannot be repaired.");
+    ItemMeta meta = item.getItemMeta();
+    if (!(meta instanceof Damageable damageable)) {
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.repair.cannot"));
+      return;
+    }
+    if (damageable.getDamage() <= 0) {
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.repair.full"));
+      return;
+    }
+    RepairCost cost = repairCost(item);
+    if (cost == null) {
+      station.player.sendMessage(Locale.get(station.player, "enchants.station.repair.cannot"));
+      return;
+    }
+    if (!cost.free()) {
+      if (!station.player.getInventory().containsAtLeast(new ItemStack(cost.material()), 1)) {
+        station.player.sendMessage(Locale.get(station.player, "enchants.station.repair.material",
+          countedMaterial(station.player, cost.material())));
         return;
       }
-      if (!station.player.getInventory().containsAtLeast(new ItemStack(material), 1)) {
-        station.player.sendMessage("§cYou need " + material.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ') + ".");
+      if (station.player.getLevel() < cost.levels()) {
+        station.player.sendMessage(Locale.get(station.player, "enchants.station.need_levels", cost.levels()));
         return;
       }
-      if (station.player.getLevel() < cost) {
-        station.player.sendMessage("§cYou need " + cost + " levels.");
-        return;
-      }
-      station.player.getInventory().removeItem(new ItemStack(material, 1));
-      LinearExperience.removeLevels(station.player, cost);
+      station.player.getInventory().removeItem(new ItemStack(cost.material(), 1));
+      if (cost.levels() > 0) LinearExperience.removeLevels(station.player, cost.levels());
     }
     damageable.setDamage(0);
     item.setItemMeta(meta);
+    DevItemStack stack = wrap(item);
+    if (stack != null) {
+      stack.render(station.player);
+      item = stack.bukkitStack();
+    }
     station.storage.setItem(0, item);
     station.player.playSound(station.player.getLocation(), Sound.BLOCK_ANVIL_USE, .8F, 1.4F);
   }
 
-  private ItemStack renderSocket(Station station, int socket, Player viewer) {
-    DevItemStack stack = station.wrap();
-    if (stack == null || !(stack.definition() instanceof SocketedVanillaItem definition)) return grayPane();
-    EnchantmentSlot slot = definition.sockets().get(socket);
-    Map<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned = definition.normalize(stack);
-    Map.Entry<DevEnchantment, EnchantmentData> filled = assigned.get(socket);
-    ItemStack icon = new ItemStack(pane(slot.category()));
-    ItemMeta meta = icon.getItemMeta();
-    String color = slot.category().color();
-    String icon1 = slot.category().icon();
-    String label = color + "[ " + icon1 + " " + slot.category().displayName(viewer) + " ]";
-    meta.setDisplayName(label);
+  /** Cost lore shown on the Repair button before anything is consumed. */
+  private List<String> repairCostLore(Station station, Player viewer) {
+    ItemStack item = station.storage.item();
+    if (item == null) return List.of();
+    ItemMeta meta = item.getItemMeta();
+    if (!(meta instanceof Damageable damageable) || damageable.getDamage() <= 0) return List.of();
+    RepairCost cost = repairCost(item);
+    if (cost == null) return List.of("", Locale.get(viewer, "enchants.station.repair.cannot"));
+    if (cost.free()) return List.of("", Locale.get(viewer, "enchants.station.repair.free"));
     ArrayList<String> lore = new ArrayList<>();
-    if (filled == null) {
-      lore.add("§8Empty socket");
-      lore.add(station.type == StationType.ANVIL
-        ? "§7Drop a matching enchanted book here to enchant."
-        : "§7Nothing to strip.");
-    } else {
-      lore.add("§7" + filled.getKey().properties().quality().colorCode() + filled.getKey().displayName(viewer)
-        + " §f" + RomanNumerals.format(filled.getValue().level()));
-      if (SocketedVanillaItem.isMending(filled.getKey()))
-        lore.addAll(SocketedVanillaItem.renderMendingDescription(viewer));
-      else
-        lore.addAll(EnchantmentDisplay.renderDescription(filled.getKey(), filled.getValue(), viewer,
-          stack.bukkitStack().getType()));
-      if (station.type == StationType.GRINDSTONE) {
-        lore.add("");
-        lore.add("§eClick to strip §7(-"
-          + plugin.enchantingCosts().refund(stack.bukkitStack().getType()) + " lvl)");
-      }
+    lore.add("");
+    lore.add(countedMaterial(viewer, cost.material()));
+    if (cost.levels() > 0) lore.add(Locale.get(viewer, "enchants.station.repair.levels", cost.levels()));
+    return lore;
+  }
+
+  /** Material and level cost of repairing a damaged item, or null when it cannot be repaired. */
+  private RepairCost repairCost(ItemStack item) {
+    DevItemStack stack = wrap(item);
+    boolean mending = stack != null
+      && stack.enchantmentData().keySet().stream().anyMatch(SocketedVanillaItem::isMending);
+    if (mending) return new RepairCost(null, 0);
+    Material material = repairMaterial(item.getType());
+    if (material == null) return null;
+    return new RepairCost(material, plugin.enchantingCosts().materialCost(item.getType()));
+  }
+
+  private static String countedMaterial(Player viewer, Material material) {
+    return ChatUtils.countedItem(1, itemDisplayName(viewer, new ItemStack(material)));
+  }
+
+  /** Rendered item name including its quality color and any custom name override. */
+  private static String itemDisplayName(Player viewer, ItemStack item) {
+    ItemStack copy = item.clone();
+    try {
+      DevItemStack rendered = ItemsPlugin.instance().factory().refresh(copy, viewer);
+      ItemMeta meta = rendered.bukkitStack().getItemMeta();
+      if (meta != null && meta.hasDisplayName()) return meta.getDisplayName();
+    } catch (RuntimeException ignored) {}
+    return "§f" + copy.getType().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+  }
+
+  private ItemStack renderAnvilSocket(Station station, int gridSlot, Player viewer) {
+    ItemStack item = station.storage.item();
+    Integer socket = SocketMenuVisuals.socketAt(item, gridSlot);
+    if (socket == null) return SocketMenuVisuals.placeholderDye();
+    try {
+      DevItemStack wrapped = ItemsPlugin.instance().factory().wrap(item);
+      if (!(wrapped.definition() instanceof SocketedVanillaItem definition))
+        return SocketMenuVisuals.placeholderDye();
+      EnchantmentSlot slot = definition.sockets().get(socket);
+      Map.Entry<DevEnchantment, EnchantmentData> filled = definition.normalize(wrapped).get(socket);
+      if (filled != null) return SocketMenuVisuals.filledSocket(slot, filled, item.getType(), viewer,
+        List.of(Locale.get(viewer, "enchants.station.socket.occupied")));
+      int cost = plugin.enchantingCosts().materialCost(item.getType());
+      ArrayList<String> hint = new ArrayList<>();
+      hint.add("");
+      hint.add(Locale.get(viewer, "enchants.station.socket.place_book"));
+      if (cost > 0) hint.add(Locale.get(viewer, "enchants.station.socket.cost", cost));
+      return SocketMenuVisuals.emptySocket(slot, viewer, hint);
+    } catch (RuntimeException ignored) {
+      return SocketMenuVisuals.placeholderDye();
     }
-    meta.setLore(lore);
-    icon.setItemMeta(meta);
-    return icon;
   }
 
-  private static Material pane(EnchantmentCategory category) {
-    return switch (category) {
-      case FATALITY -> Material.RED_STAINED_GLASS_PANE;
-      case PROWESS -> Material.MAGENTA_STAINED_GLASS_PANE;
-      case PROTECTION -> Material.LIME_STAINED_GLASS_PANE;
-      case MOBILITY -> Material.LIGHT_BLUE_STAINED_GLASS_PANE;
-      case TIDE -> Material.BLUE_STAINED_GLASS_PANE;
-      case HARVESTING -> Material.ORANGE_STAINED_GLASS_PANE;
-      case SUSTAINABILITY -> Material.YELLOW_STAINED_GLASS_PANE;
-      case UNIVERSAL -> Material.WHITE_STAINED_GLASS_PANE;
-    };
+  private ItemStack renderGrindstoneSocket(Station station, int gridSlot, Player viewer) {
+    ItemStack item = station.storage.item();
+    Integer socket = SocketMenuVisuals.socketAt(item, gridSlot);
+    if (socket == null) return SocketMenuVisuals.placeholderDye();
+    try {
+      DevItemStack wrapped = ItemsPlugin.instance().factory().wrap(item);
+      if (!(wrapped.definition() instanceof SocketedVanillaItem definition))
+        return SocketMenuVisuals.placeholderDye();
+      EnchantmentSlot slot = definition.sockets().get(socket);
+      Map.Entry<DevEnchantment, EnchantmentData> filled = definition.normalize(wrapped).get(socket);
+      if (filled == null) return SocketMenuVisuals.emptySocket(slot, viewer, List.of(
+        "", Locale.get(viewer, "enchants.station.socket.nothing_to_strip")));
+      int refund = plugin.enchantingCosts().refund(item.getType());
+      if (refund > 0) return SocketMenuVisuals.filledSocket(slot, filled, item.getType(), viewer, List.of(
+        Locale.get(viewer, "enchants.station.socket.strip.action"),
+        Locale.get(viewer, "enchants.station.socket.strip.cost", refund)));
+      return SocketMenuVisuals.filledSocket(slot, filled, item.getType(), viewer, List.of(
+        Locale.get(viewer, "enchants.station.socket.strip.no_refund")));
+    } catch (RuntimeException ignored) {
+      return SocketMenuVisuals.placeholderDye();
+    }
   }
 
-  private static MenuItem filler() {
-    return MenuItem.builder(Material.GRAY_STAINED_GLASS_PANE).localizedName("enchants.menu.blank").build();
+  private static void reject(Station station, String key, Object... arguments) {
+    station.player.sendMessage(Locale.get(station.player, key, arguments));
+    station.player.playSound(station.player.getLocation(), Sound.ENTITY_VILLAGER_NO, .8F, 1F);
   }
 
-  private static ItemStack grayPane() {
-    ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-    ItemMeta meta = pane.getItemMeta();
-    meta.setDisplayName(" ");
-    pane.setItemMeta(meta);
-    return pane;
+  private static DevItemStack wrap(ItemStack item) {
+    if (item == null) return null;
+    try {
+      return ItemsPlugin.instance().factory().wrap(item);
+    } catch (RuntimeException exception) {
+      return null;
+    }
   }
 
   private void finish(Station station) {
     if (station.finished) return;
     station.finished = true;
     stations.remove(station.player.getUniqueId(), station);
-    ItemStack item = station.storage.take();
-    if (item != null) {
-      station.player.getInventory().addItem(item).values().forEach(leftover ->
-        station.player.getWorld().dropItemNaturally(station.player.getLocation(), leftover));
-    }
+    giveOrDrop(station.player, station.storage.takeItem());
+    station.storage.takeSockets().forEach(leftover -> giveOrDrop(station.player, leftover));
   }
 
-  private static boolean socketable(ItemStack item) {
-    return item != null && !item.getType().isAir() && SocketedVanillaItem.supports(item.getType());
+  private static void giveOrDrop(Player player, ItemStack item) {
+    if (item == null || item.getType().isAir() || item.getAmount() <= 0) return;
+    player.getInventory().addItem(item).values().forEach(leftover ->
+      player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+  }
+
+  private static MenuItem filler() {
+    return filler(Material.GRAY_STAINED_GLASS_PANE);
+  }
+
+  private static MenuItem filler(Material material) {
+    return MenuItem.builder(material).localizedName("enchants.menu.blank").build();
   }
 
   private static Material repairMaterial(Material material) {
@@ -306,11 +437,30 @@ final class SocketStationController implements Listener {
   }
 
   private enum StationType {
-    ANVIL("Anvil"),
-    GRINDSTONE("Grindstone");
+    ANVIL("enchants.station.anvil.title", "enchants.station.anvil.name",
+      "enchants.station.anvil.description", "enchants.station.info.anvil", Material.ANVIL),
+    GRINDSTONE("enchants.station.grindstone.title", "enchants.station.grindstone.name",
+      "enchants.station.grindstone.description", "enchants.station.info.grindstone", Material.GRINDSTONE);
 
-    private final String title;
-    StationType(String title) { this.title = title; }
+    private final String titleKey;
+    private final String nameKey;
+    private final String descriptionKey;
+    private final String infoKey;
+    private final Material icon;
+
+    StationType(String titleKey, String nameKey, String descriptionKey, String infoKey, Material icon) {
+      this.titleKey = titleKey;
+      this.nameKey = nameKey;
+      this.descriptionKey = descriptionKey;
+      this.infoKey = infoKey;
+      this.icon = icon;
+    }
+
+    private String titleKey() { return titleKey; }
+    private String nameKey() { return nameKey; }
+    private String descriptionKey() { return descriptionKey; }
+    private String infoKey() { return infoKey; }
+    private Material icon() { return icon; }
 
     static StationType of(Material material) {
       return switch (material) {
@@ -321,50 +471,65 @@ final class SocketStationController implements Listener {
     }
   }
 
-  private final class Station {
+  /** Resolved repair price; a null material means the Mending repair is free. */
+  private record RepairCost(Material material, int levels) {
+    private boolean free() { return material == null; }
+  }
+
+  private static final class Station {
     private final Player player;
     private final StationType type;
-    private final InputStorage storage;
-    private final int sockets;
+    private final StationStorage storage = new StationStorage();
     private MenuSession session;
     private boolean finished;
 
-    private Station(Player player, StationType type, ItemStack item) {
+    private Station(Player player, StationType type) {
       this.player = player;
       this.type = type;
-      this.storage = new InputStorage(item);
-      this.sockets = item == null ? 0 : socketCount(item);
-    }
-
-    private int sockets() { return sockets; }
-
-    private DevItemStack wrap() {
-      ItemStack item = storage.getItem(0);
-      if (item == null) return null;
-      try {
-        return ItemsPlugin.instance().factory().wrap(item);
-      } catch (RuntimeException exception) {
-        return null;
-      }
     }
   }
 
-  private static int socketCount(ItemStack item) {
-    try {
-      DevItemStack stack = ItemsPlugin.instance().factory().wrap(item);
-      return stack.definition() instanceof SocketedVanillaItem definition ? definition.sockets().size() : 0;
-    } catch (RuntimeException exception) {
-      return 0;
-    }
-  }
-
-  private static final class InputStorage extends StorageProvider {
+  /** Index 0 holds the target item; indices 1-10 hold socket book placements. */
+  private static final class StationStorage extends StorageProvider {
     private ItemStack item;
-    private InputStorage(ItemStack item) { this.item = item == null ? null : item.clone(); }
-    @Override public int size() { return 1; }
-    @Override public ItemStack getItem(int index) { requireIndex(index); return item == null ? null : item.clone(); }
-    @Override public void setItem(int index, ItemStack value) { requireIndex(index); item = value == null ? null : value.clone(); }
-    private ItemStack take() { ItemStack result = item; item = null; return result; }
-    private static void requireIndex(int index) { if (index != 0) throw new IndexOutOfBoundsException(index); }
+    private final ItemStack[] sockets = new ItemStack[SOCKET_STORAGE_SIZE];
+
+    @Override public int size() { return 1 + SOCKET_STORAGE_SIZE; }
+
+    @Override public ItemStack getItem(int index) {
+      requireIndex(index);
+      ItemStack value = index == 0 ? item : sockets[index - 1];
+      return value == null ? null : value.clone();
+    }
+
+    @Override public void setItem(int index, ItemStack value) {
+      requireIndex(index);
+      ItemStack stored = value == null || value.getType().isAir() ? null : value.clone();
+      if (index == 0) item = stored;
+      else sockets[index - 1] = stored;
+    }
+
+    ItemStack item() {
+      return item == null ? null : item.clone();
+    }
+
+    ItemStack takeItem() {
+      ItemStack result = item;
+      item = null;
+      return result;
+    }
+
+    List<ItemStack> takeSockets() {
+      ArrayList<ItemStack> leftover = new ArrayList<>(sockets.length);
+      for (int index = 0; index < sockets.length; index++) {
+        if (sockets[index] != null) leftover.add(sockets[index]);
+        sockets[index] = null;
+      }
+      return leftover;
+    }
+
+    private static void requireIndex(int index) {
+      if (index < 0 || index >= 1 + SOCKET_STORAGE_SIZE) throw new IndexOutOfBoundsException(index);
+    }
   }
 }

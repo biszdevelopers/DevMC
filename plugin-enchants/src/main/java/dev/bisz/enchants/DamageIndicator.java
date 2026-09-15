@@ -11,7 +11,7 @@ import org.bukkit.entity.TextDisplay;
 import org.bukkit.plugin.Plugin;
 
 /** Floating, per-entity deduplicated damage numbers. */
-final class DamageIndicator {
+public final class DamageIndicator {
   private static boolean enabled = true;
   private static final Map<UUID, TextDisplay> active = new HashMap<>();
 
@@ -21,40 +21,49 @@ final class DamageIndicator {
   static boolean isEnabled() { return enabled; }
 
   @SuppressWarnings("deprecation")
-  static void show(Plugin plugin, Entity target, double damage) {
-    if (!enabled || target == null || target.isDead()) return;
-    TextDisplay previous = active.remove(target.getUniqueId());
+  public static void show(Plugin plugin, Entity target, double damage) {
+    if (!enabled || target == null) return;
+    // The indicator is an independent display, so a lethal hit must still show
+    // it even though the target is already dying or removed.
+    Location location;
+    try {
+      location = target.getLocation().add(0, target.getHeight() + 0.4, 0);
+    } catch (RuntimeException exception) {
+      return;
+    }
+    if (location.getWorld() == null) return;
+    UUID targetId = target.getUniqueId();
+    TextDisplay previous = active.remove(targetId);
     if (previous != null && previous.isValid()) previous.remove();
 
-    Location location = target.getLocation().add(0, target.getHeight() + 0.4, 0);
-    TextDisplay display = target.getWorld().spawn(location, TextDisplay.class, entity -> {
+    TextDisplay display = location.getWorld().spawn(location, TextDisplay.class, entity -> {
       entity.setText("§c" + format(damage));
       entity.setBillboard(Display.Billboard.CENTER);
       entity.setSeeThrough(true);
       entity.setShadowed(false);
       entity.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
     });
-    active.put(target.getUniqueId(), display);
+    active.put(targetId, display);
 
     int[] ticks = {0};
     plugin.getServer().getScheduler().runTaskTimer(plugin, task -> {
       ticks[0]++;
       if (!display.isValid()) {
-        active.remove(target.getUniqueId());
+        active.remove(targetId);
         task.cancel();
         return;
       }
       display.teleport(display.getLocation().add(0, 0.1, 0));
       if (ticks[0] >= 20) {
-        active.remove(target.getUniqueId());
+        active.remove(targetId);
         display.remove();
         task.cancel();
       }
     }, 0L, 1L);
   }
 
-  private static String format(double damage) {
-    double rounded = Math.round(damage * 10) / 10.0;
-    return rounded == Math.floor(rounded) ? String.valueOf((int) rounded) : String.valueOf(rounded);
+  static String format(double damage) {
+    double value = damage <= 0D ? 0D : Math.max(.1D, Math.ceil(damage * 10D - 1e-9D) / 10D);
+    return String.format(java.util.Locale.US, "%.1f", value);
   }
 }

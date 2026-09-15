@@ -34,22 +34,17 @@ import org.bukkit.potion.PotionData;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class TypedSocketModelTest {
-  @BeforeAll static void loadCatalog() {
-    TestConfig.bootstrap();
-  }
-
   @Test void everyExperienceLevelCostsTheConfiguredAmount() {
-    assertEquals(100, LinearExperience.DEFAULT_POINTS_PER_LEVEL);
-    assertEquals(100, LinearExperience.pointsPerLevel());
+    assertEquals(20, LinearExperience.DEFAULT_POINTS_PER_LEVEL);
+    assertEquals(20, LinearExperience.pointsPerLevel());
     assertEquals(0, LinearExperience.totalPoints(0, 0F));
-    assertEquals(100, LinearExperience.totalPoints(1, 0F));
-    assertEquals(500, LinearExperience.totalPoints(5, 0F));
-    assertEquals(600, LinearExperience.totalPoints(6, 0F));
-    assertEquals(553, LinearExperience.totalPoints(5, 9F / 17F));
+    assertEquals(20, LinearExperience.totalPoints(1, 0F));
+    assertEquals(100, LinearExperience.totalPoints(5, 0F));
+    assertEquals(120, LinearExperience.totalPoints(6, 0F));
+    assertEquals(111, LinearExperience.totalPoints(5, 9F / 17F));
   }
 
   @Test void mendingLevelsRiseThroughTheConfiguredTierThresholds() {
@@ -146,6 +141,16 @@ class TypedSocketModelTest {
     assertEquals(1507, LinearExperience.vanillaTotalPoints(31, 0F));
   }
 
+  @Test void damageIndicatorRoundsUpTenthsWithAPositiveFloor() {
+    assertEquals("0.0", DamageIndicator.format(0D));
+    assertEquals("0.0", DamageIndicator.format(-3D));
+    assertEquals("0.1", DamageIndicator.format(0.01D));
+    assertEquals("0.3", DamageIndicator.format(0.30000000000000004D));
+    assertEquals("2.3", DamageIndicator.format(2.3D));
+    assertEquals("2.4", DamageIndicator.format(2.31D));
+    assertEquals("7.0", DamageIndicator.format(7D));
+  }
+
   @Test void shortbowCopiesTippedArrowPotionPayload() {
     PotionData base = new PotionData(PotionType.POISON, false, true);
     PotionEffect custom = new PotionEffect(PotionEffectType.SLOW, 80, 1);
@@ -193,13 +198,26 @@ class TypedSocketModelTest {
   }
 
   @Test void selectorGridCentersRowsWithoutChangingSocketOrder() {
-    assertEquals(31, EnchantingMenuController.gridPosition(0, 1));
-    assertEquals(30, EnchantingMenuController.gridPosition(0, 3));
-    assertEquals(32, EnchantingMenuController.gridPosition(2, 3));
-    assertEquals(29, EnchantingMenuController.gridPosition(0, 7));
-    assertEquals(33, EnchantingMenuController.gridPosition(4, 7));
-    assertEquals(39, EnchantingMenuController.gridPosition(5, 7));
-    assertEquals(40, EnchantingMenuController.gridPosition(6, 7));
+    assertEquals(31, SocketMenuVisuals.gridPosition(0, 1));
+    assertEquals(30, SocketMenuVisuals.gridPosition(0, 3));
+    assertEquals(32, SocketMenuVisuals.gridPosition(2, 3));
+    assertEquals(29, SocketMenuVisuals.gridPosition(0, 7));
+    assertEquals(33, SocketMenuVisuals.gridPosition(4, 7));
+    assertEquals(39, SocketMenuVisuals.gridPosition(5, 7));
+    assertEquals(40, SocketMenuVisuals.gridPosition(6, 7));
+  }
+
+  @Test void socketGridAndFrameRenderWithoutOverlap() {
+    for (int socketSlot : SocketMenuVisuals.SOCKET_SLOTS)
+      for (int frameSlot : SocketMenuVisuals.BLACK_SLOTS)
+        assertFalse(socketSlot == frameSlot, "Socket slot " + socketSlot + " must not be a frame slot");
+    Material[] dyes = new Material[EnchantmentCategory.values().length];
+    for (EnchantmentCategory category : EnchantmentCategory.values()) {
+      Material dye = SocketMenuVisuals.dye(category);
+      for (int index = 0; index < category.ordinal(); index++)
+        assertFalse(dye == dyes[index], "Category dye colors must be unique");
+      dyes[category.ordinal()] = dye;
+    }
   }
 
   @Test void rawBooksExposeTheCenteredUniversalSocket() {
@@ -211,6 +229,26 @@ class TypedSocketModelTest {
     assertTrue(book.sockets().get(0).accepts(new LethalityEnchantment()));
   }
 
+  @Test void universalSocketsAcceptEnchantmentsThatDoNotFitTheMaterial() {
+    SocketedBookItem book = new SocketedBookItem(Material.BOOK);
+    assertTrue(book.sockets().get(0).accepts(new LethalityEnchantment(), Material.BOOK));
+    assertTrue(book.sockets().get(0).accepts(new WingedEnchantment(), Material.BOOK));
+    EnchantmentSlot fatality = EnchantmentSlot.typed(0, EnchantmentCategory.FATALITY);
+    assertTrue(fatality.accepts(new LethalityEnchantment(), Material.IRON_SWORD));
+    assertFalse(fatality.accepts(new WingedEnchantment(), Material.IRON_SWORD));
+  }
+
+  @Test void filledUniversalSocketsPresentTheEnchantmentsCategory() {
+    SocketedBookItem book = new SocketedBookItem(Material.BOOK);
+    EnchantmentSlot socket = book.sockets().get(0);
+    assertEquals(EnchantmentCategory.UNIVERSAL, socket.category());
+    assertEquals(EnchantmentCategory.FATALITY, socket.filledCategory(new LethalityEnchantment()));
+    assertEquals(EnchantmentCategory.MOBILITY, socket.filledCategory(new WingedEnchantment()));
+    assertEquals(EnchantmentCategory.TIDE, socket.filledCategory(new TestRiptide()));
+    EnchantmentSlot fatality = EnchantmentSlot.typed(0, EnchantmentCategory.FATALITY);
+    assertEquals(EnchantmentCategory.FATALITY, fatality.filledCategory(new WingedEnchantment()));
+  }
+
   @Test void registeredSocketItemsUseDedicatedOverrideTypes() {
     assertEquals("IronSword", SocketedItemOverrides.create(Material.IRON_SWORD).getClass().getSimpleName());
     assertEquals("GoldenPickaxe", SocketedItemOverrides.create(Material.GOLDEN_PICKAXE).getClass().getSimpleName());
@@ -218,7 +256,7 @@ class TypedSocketModelTest {
 
   @Test void exactAllowlistExcludesWoodAndIncludesConfiguredNetheriteTools() {
     assertFalse(SocketedVanillaItem.supports(Material.WOODEN_SWORD));
-    assertTrue(SocketedVanillaItem.supports(Material.NETHERITE_PICKAXE));
+    assertTrue(SocketedVanillaItem.supports(Material.NETHERITE_SHOVEL));
     assertTrue(SocketedVanillaItem.supports(Material.IRON_SWORD));
   }
 
@@ -236,8 +274,7 @@ class TypedSocketModelTest {
       EnchantmentCategory.TIDE,
       EnchantmentCategory.HARVESTING,
       EnchantmentCategory.HARVESTING,
-      EnchantmentCategory.HARVESTING,
-      EnchantmentCategory.SUSTAINABILITY
+      EnchantmentCategory.HARVESTING
     ), SocketLayouts.forMaterial(Material.FISHING_ROD));
   }
 

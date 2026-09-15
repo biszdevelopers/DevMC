@@ -1,5 +1,6 @@
 package dev.bisz.enchants;
 
+import dev.bisz.items.ItemsPlugin;
 import dev.bisz.players.PlayerProfile;
 import dev.bisz.players.Profile;
 import java.util.HashMap;
@@ -28,6 +29,15 @@ final class TooltipPreferences {
   static void set(Player viewer, boolean collapsed) {
     CACHE.put(viewer.getUniqueId(), collapsed);
     Profile.setMetadata(viewer.getUniqueId(), KEY, collapsed);
+    rerenderInventory(viewer);
+  }
+
+  private static void rerenderInventory(Player viewer) {
+    try {
+      ItemsPlugin.instance().factory().forceRenderInventory(viewer);
+    } catch (RuntimeException ignored) {
+      // Rendering is cosmetic; the preference is already saved.
+    }
   }
 
   static void forget(UUID id) { CACHE.remove(id); }

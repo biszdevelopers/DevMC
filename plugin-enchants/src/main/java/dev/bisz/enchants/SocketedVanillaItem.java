@@ -105,14 +105,15 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
     for (EnchantmentSlot socket : sockets) {
       Map.Entry<DevEnchantment, EnchantmentData> entry = assigned.get(socket.index());
       if (entry == null) {
-        lines.add(SocketDisplayRenderer.empty(socket.category().color(), socket.category().icon(), viewer));
+        lines.add(SocketDisplayRenderer.empty(socket.category().icon(), viewer));
         continue;
       }
       // A filled socket begins its own lore block even when the socket directly
       // above it is empty. Filled sections already separated by a description's
       // trailing blank line must not receive a second separator.
       separateFilledSocket(lines);
-      lines.add(SocketDisplayRenderer.filled(socket.category().color(), socket.category().icon(), entry, viewer));
+      EnchantmentCategory display = socket.filledCategory(entry.getKey());
+      lines.add(SocketDisplayRenderer.filled(display.color(), display.icon(), entry, viewer));
       if (isMending(entry.getKey())) {
         if (descriptions) {
           lines.addAll(renderMendingDescription(viewer));
@@ -153,9 +154,8 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
 
   void applySocketEnchantment(DevItemStack stack, DevEnchantment enchantment, EnchantmentData data) {
     HashMap<Integer, Map.Entry<DevEnchantment, EnchantmentData>> assigned = new HashMap<>(normalize(stack));
-    if (!EnchantmentCatalog.repeatable(enchantment) && assigned.values().stream()
-      .anyMatch(entry -> entry.getKey().id().equals(enchantment.id())))
-      throw new IllegalArgumentException("Only Efficiency may occupy repeated sockets");
+    if (!EnchantmentCatalog.compatible(enchantment, assigned.values().stream().map(Map.Entry::getKey).toList()))
+      throw new IllegalArgumentException("Enchantment cannot be applied alongside the item's current enchantments");
     Object raw = data.metadata().get(SLOT_KEY);
     if (!(raw instanceof Integer slot) || slot < 0 || slot >= sockets.size() || assigned.containsKey(slot)
       || !sockets.get(slot).accepts(enchantment))
@@ -354,23 +354,30 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
   /**
    * Custom enchantments live in ItemLib's PDC payload, so the item would not
    * otherwise show the vanilla enchantment glint. A hidden marker enchantment
-   * (Luck of the Sea) supplies the glint and is hidden by HIDE_ENCHANTS.
+   * supplies the glint and is hidden by HIDE_ENCHANTS. Luck of the Sea is a
+   * genuine fishing-rod enchantment, so rods use Protection instead and any
+   * stray Luck of the Sea on a rod is stripped.
    */
   private static final Enchantment GLINT_MARKER = Enchantment.LUCK;
+  private static final Enchantment FISHING_ROD_GLINT_MARKER = Enchantment.PROTECTION_ENVIRONMENTAL;
 
   private static void applyGlint(DevItemStack stack, boolean glint) {
     ItemMeta meta = stack.bukkitStack().getItemMeta();
     if (meta == null) return;
-    boolean present = meta.hasEnchant(GLINT_MARKER);
-    if (glint == present) return;
-    if (glint) meta.addEnchant(GLINT_MARKER, 1, true);
-    else meta.removeEnchant(GLINT_MARKER);
-    stack.bukkitStack().setItemMeta(meta);
-  }
-
-  static boolean isGlintMarker(DevEnchantment enchantment) {
-    return enchantment.vanilla() && enchantment.id().namespace().equals("minecraft")
-      && enchantment.id().path().equals("luck_of_the_sea");
+    boolean rod = stack.bukkitStack().getType() == Material.FISHING_ROD;
+    boolean changed = false;
+    if (rod && meta.hasEnchant(GLINT_MARKER)) {
+      meta.removeEnchant(GLINT_MARKER);
+      changed = true;
+    }
+    Enchantment marker = rod ? FISHING_ROD_GLINT_MARKER : GLINT_MARKER;
+    boolean present = meta.hasEnchant(marker);
+    if (glint != present) {
+      if (glint) meta.addEnchant(marker, 1, true);
+      else meta.removeEnchant(marker);
+      changed = true;
+    }
+    if (changed) stack.bukkitStack().setItemMeta(meta);
   }
 
   /** Removes the enchantment assigned to one socket and reconciles totals. */
@@ -585,9 +592,7 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
   }
 
   private boolean acceptsOnItem(DevEnchantment enchantment) {
-    boolean universal = sockets.stream().anyMatch(slot -> slot.category() == EnchantmentCategory.UNIVERSAL);
-    return sockets.stream().anyMatch(slot -> slot.accepts(enchantment))
-      && (universal || EnchantmentCatalog.applicable(enchantment, material()));
+    return sockets.stream().anyMatch(slot -> slot.accepts(enchantment, material()));
   }
   private static String locale(Player viewer, String key, Object... arguments) {
     return viewer == null ? Locale.get("en_us", key, arguments) : Locale.get(viewer, key, arguments);

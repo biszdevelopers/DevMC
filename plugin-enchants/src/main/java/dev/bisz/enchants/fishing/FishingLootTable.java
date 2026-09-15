@@ -5,10 +5,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import org.bukkit.Material;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
 
-/** Weighted fish/treasure loot tables loaded from {@code fishing.yml}. */
+/** Weighted fish/treasure loot tables loaded from {@code enchants/fishing.json}. */
 final class FishingLootTable {
   private int baseTime = 15;
   private double efficiencyReduction = .15D;
@@ -17,17 +16,18 @@ final class FishingLootTable {
   private final List<LootEntry> treasure = new ArrayList<>();
   private final Random random = new Random();
 
-  void load(FileConfiguration config) {
-    baseTime = config.getInt("base-time", 15);
-    efficiencyReduction = config.getDouble("efficiency-reduction", .15D);
-    treasureChance = config.getDouble("treasure-chance", .05D);
+  void load(Map<String, Object> config) {
+    baseTime = number(config.get("base-time"), 15);
+    efficiencyReduction = decimal(config.get("efficiency-reduction"), .15D);
+    treasureChance = decimal(config.get("treasure-chance"), .05D);
+    Map<String, Object> loot = section(config.get("loot"));
     fish.clear();
-    for (Map<?, ?> entry : config.getMapList("loot.fish")) {
+    for (Map<String, Object> entry : maps(loot.get("fish"))) {
       LootEntry parsed = LootEntry.parse(entry);
       if (parsed != null) fish.add(parsed);
     }
     treasure.clear();
-    for (Map<?, ?> entry : config.getMapList("loot.treasure")) {
+    for (Map<String, Object> entry : maps(loot.get("treasure"))) {
       LootEntry parsed = LootEntry.parse(entry);
       if (parsed != null) treasure.add(parsed);
     }
@@ -55,6 +55,29 @@ final class FishingLootTable {
       }
     }
     return new ItemStack(pool.get(pool.size() - 1).material, 1);
+  }
+
+  private static int number(Object value, int fallback) {
+    return value instanceof Number number ? number.intValue() : fallback;
+  }
+
+  private static double decimal(Object value, double fallback) {
+    return value instanceof Number number ? number.doubleValue() : fallback;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> section(Object value) {
+    return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<Map<String, Object>> maps(Object value) {
+    if (!(value instanceof List<?> list)) return List.of();
+    ArrayList<Map<String, Object>> result = new ArrayList<>(list.size());
+    for (Object element : list) {
+      if (element instanceof Map<?, ?> map) result.add((Map<String, Object>) map);
+    }
+    return result;
   }
 
   private static final class LootEntry {

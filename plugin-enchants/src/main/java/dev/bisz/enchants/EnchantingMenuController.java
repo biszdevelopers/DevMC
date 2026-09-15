@@ -5,7 +5,6 @@ import dev.bisz.items.DevEnchantment;
 import dev.bisz.items.DevItemStack;
 import dev.bisz.items.EnchantmentData;
 import dev.bisz.items.EnchantmentDisplay;
-import dev.bisz.items.RomanNumerals;
 import dev.bisz.items.ItemsPlugin;
 import dev.bisz.menus.MenuItem;
 import dev.bisz.menus.MenuSession;
@@ -27,7 +26,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -35,7 +33,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
@@ -44,10 +41,6 @@ import org.bukkit.scheduler.BukkitTask;
 /** Owns enchanting-table interception, live sessions, rendering, and transactions. */
 final class EnchantingMenuController implements Listener {
   private static final int[] OFFER_SLOTS = { 30, 31, 32 };
-  private static final int[] SOCKET_SLOTS = { 29, 30, 31, 32, 33, 38, 39, 40, 41, 42 };
-  private static final int[] BLACK_SLOTS = {
-    0, 1, 2, 3, 5, 6, 7, 8, 9, 17, 18, 26, 27, 35, 36, 44, 45, 46, 47, 51, 52, 53,
-  };
   private static final String PLAYER_SEED_KEY = "minecraft:enchanting_table/random_seed";
   private final EnchantsPlugin plugin;
   private final Map<UUID, ActiveMenu> activeMenus = new LinkedHashMap<>();
@@ -85,13 +78,14 @@ final class EnchantingMenuController implements Listener {
       6
     );
     for (int slot = 0; slot < 54; slot++) builder.item(slot, filler(Material.GRAY_STAINED_GLASS_PANE));
-    for (int slot : BLACK_SLOTS) builder.item(slot, filler(Material.BLACK_STAINED_GLASS_PANE));
+    for (int slot : SocketMenuVisuals.BLACK_SLOTS) builder.item(slot, filler(Material.BLACK_STAINED_GLASS_PANE));
     builder.item(4, MenuItem.builder(Material.ENCHANTING_TABLE)
       .localizedName("enchants.menu.table.name")
       .wrappedLocalizedLore("enchants.menu.table.description")
       .build());
     builder.storageIndex(22, 0);
-    for (int slot : SOCKET_SLOTS) {
+    builder.removeItem(22);
+    for (int slot : SocketMenuVisuals.SOCKET_SLOTS) {
       int gridSlot = slot;
       builder.item(gridSlot, MenuItem.dynamic(viewer -> renderGridCell(active, gridSlot, viewer))
         .onClick(context -> clickGridCell(active, gridSlot)));
@@ -142,8 +136,8 @@ final class EnchantingMenuController implements Listener {
       List<EnchantmentOffer> generated = plugin.enchantmentGenerator().generate(
         new EnchantingGenerationContext(input, data(active.matches), random, active.selectedSocket)
       );
-      if (!generated.isEmpty() && generated.size() != 3) throw new IllegalStateException(
-        "Enchantment generators must return zero or exactly three offers"
+      if (generated.size() > OFFER_SLOTS.length) throw new IllegalStateException(
+        "Enchantment generators cannot return more than three offers"
       );
       active.offers = List.copyOf(generated);
       ArrayList<String> hints = new ArrayList<>(generated.size());
@@ -156,7 +150,8 @@ final class EnchantingMenuController implements Listener {
   }
 
   private ItemStack renderOffer(ActiveMenu active, int index, Player viewer) {
-    if (index >= active.offers.size()) return placeholder(active, viewer);
+    if (index >= active.offers.size()) return active.offers.isEmpty()
+      ? placeholder(active, viewer) : emptyOffer(viewer);
     EnchantmentOffer offer = active.offers.get(index);
     ItemStack icon = new ItemStack(Material.ENCHANTED_BOOK);
     ItemMeta meta = icon.getItemMeta();
@@ -189,8 +184,9 @@ final class EnchantingMenuController implements Listener {
     }
     lore.add("");
     lore.add(Locale.get(viewer, "enchants.offer.divider"));
-    lore.add(Locale.get(viewer, "enchants.offer.lapis", offer.lapisLazuli()));
-    lore.add(Locale.get(viewer, "enchants.offer.levels", offer.experienceLevels()));
+    if (offer.lapisLazuli() > 0) lore.add(Locale.get(viewer, "enchants.offer.lapis", offer.lapisLazuli()));
+    if (offer.experienceLevels() > 0)
+      lore.add(Locale.get(viewer, "enchants.offer.levels", offer.experienceLevels()));
     lore.add("");
     lore.add(requirementsMet(viewer, offer)
       ? Locale.get(viewer, "enchants.offer.click")
@@ -203,7 +199,7 @@ final class EnchantingMenuController implements Listener {
   private ItemStack renderGridCell(ActiveMenu active, int gridSlot, Player viewer) {
     int offerIndex = offerIndex(gridSlot);
     if (active.selectedSocket != null) return offerIndex >= 0
-      ? renderOffer(active, offerIndex, viewer) : grayFiller();
+      ? renderOffer(active, offerIndex, viewer) : SocketMenuVisuals.grayFiller();
     return renderSocket(active, gridSlot, viewer);
   }
 
@@ -217,8 +213,8 @@ final class EnchantingMenuController implements Listener {
   }
 
   private ItemStack renderPreviousPage(ActiveMenu active) {
-    if (active.selectedSocket == null) return blackFiller();
-    return named(Material.ARROW, "§ePrevious Page", List.of("§7Return to socket selection"));
+    if (active.selectedSocket == null) return SocketMenuVisuals.blackFiller();
+    return SocketMenuVisuals.named(Material.ARROW, "§ePrevious Page", List.of("§7Return to socket selection"));
   }
 
   private void returnToSocketSelection(ActiveMenu active) {
@@ -231,8 +227,8 @@ final class EnchantingMenuController implements Listener {
 
   private void selectSocket(ActiveMenu active, int gridSlot) {
     if (active.finished) return;
-    Integer socket = socketAt(active.storage.getItem(0), gridSlot);
-    if (socket == null || !socketIsFree(active.storage.getItem(0), socket)) return;
+    Integer socket = SocketMenuVisuals.socketAt(active.storage.getItem(0), gridSlot);
+    if (socket == null || !SocketMenuVisuals.socketIsFree(active.storage.getItem(0), socket)) return;
     active.selectedSocket = socket;
     regenerate(active);
     active.session.refresh();
@@ -240,123 +236,28 @@ final class EnchantingMenuController implements Listener {
 
   private ItemStack renderSocket(ActiveMenu active, int gridSlot, Player viewer) {
     ItemStack input = active.storage.getItem(0);
-    Integer socket = socketAt(input, gridSlot);
-    if (socket == null) return placeholderDye();
+    Integer socket = SocketMenuVisuals.socketAt(input, gridSlot);
+    if (socket == null) return SocketMenuVisuals.placeholderDye();
     try {
       DevItemStack wrapped = ItemsPlugin.instance().factory().wrap(input);
-      if (!(wrapped.definition() instanceof SocketedVanillaItem definition)) return placeholderDye();
+      if (!(wrapped.definition() instanceof SocketedVanillaItem definition)) return SocketMenuVisuals.placeholderDye();
       EnchantmentSlot slot = definition.sockets().get(socket);
       Map.Entry<DevEnchantment, EnchantmentData> filled = definition.normalize(wrapped).get(socket);
-      return filled == null ? emptySocket(slot, viewer) : filledSocket(slot, filled, input.getType(), viewer);
+      return filled == null
+        ? SocketMenuVisuals.emptySocket(slot, viewer, clickToEnchantLore())
+        : SocketMenuVisuals.filledSocket(slot, filled, input.getType(), viewer, List.of("§cThis socket is occupied"));
     } catch (RuntimeException ignored) {
-      return placeholderDye();
+      return SocketMenuVisuals.placeholderDye();
     }
-  }
-
-  private ItemStack emptySocket(EnchantmentSlot slot, Player viewer) {
-    String color = slot.category().color();
-    String label = color + "[ " + slot.category().icon() + " " + slot.category().displayName(viewer)
-      + " §8Empty" + color + " ]";
-    return named(dye(slot.category()), label, clickToEnchantLore());
-  }
-
-  private ItemStack filledSocket(EnchantmentSlot slot, Map.Entry<DevEnchantment, EnchantmentData> filled,
-      Material material, Player viewer) {
-    String color = slot.category().color();
-    String icon = slot.category().icon();
-    String label = color + "[ " + icon + " " + slot.category().displayName(viewer) + ": "
-      + filled.getKey().properties().quality().colorCode()
-      + filled.getKey().displayName(viewer) + " " + RomanNumerals.format(filled.getValue().level()) + color + " ]";
-    ArrayList<String> lore = new ArrayList<>(
-      SocketedVanillaItem.isMending(filled.getKey())
-        ? SocketedVanillaItem.renderMendingDescription(viewer)
-        : EnchantmentDisplay.renderDescription(filled.getKey(), filled.getValue(), viewer, material));
-    if (!lore.isEmpty()) lore.add("");
-    lore.add("§cThis socket is occupied");
-    ItemStack iconStack = named(dye(slot.category()), label, lore);
-    iconStack.setAmount(Math.max(1, Math.min(64, filled.getValue().level())));
-    ItemMeta meta = iconStack.getItemMeta();
-    meta.addEnchant(Enchantment.LUCK, 1, true);
-    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-    iconStack.setItemMeta(meta);
-    return iconStack;
-  }
-
-  private static ItemStack named(Material material, String name, List<String> lore) {
-    ItemStack icon = new ItemStack(material);
-    ItemMeta meta = icon.getItemMeta();
-    meta.setDisplayName(name);
-    meta.setLore(lore);
-    icon.setItemMeta(meta);
-    return icon;
   }
 
   private static List<String> clickToEnchantLore() {
     return List.of("", "§eClick to enchant");
   }
 
-  private static ItemStack placeholderDye() {
-    return named(Material.GRAY_DYE, " ", List.of());
-  }
-
-  private static ItemStack blackFiller() {
-    return named(Material.BLACK_STAINED_GLASS_PANE, " ", List.of());
-  }
-
-  private static ItemStack grayFiller() {
-    return named(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
-  }
-
-  private static Material dye(EnchantmentCategory category) {
-    return switch (category) {
-      case FATALITY -> Material.RED_DYE;
-      case PROWESS -> Material.MAGENTA_DYE;
-      case PROTECTION -> Material.LIME_DYE;
-      case MOBILITY -> Material.LIGHT_BLUE_DYE;
-      case TIDE -> Material.BLUE_DYE;
-      case HARVESTING -> Material.ORANGE_DYE;
-      case SUSTAINABILITY -> Material.YELLOW_DYE;
-      case UNIVERSAL -> Material.WHITE_DYE;
-    };
-  }
-
   private static int offerIndex(int gridSlot) {
     for (int index = 0; index < OFFER_SLOTS.length; index++) if (OFFER_SLOTS[index] == gridSlot) return index;
     return -1;
-  }
-
-  /** Returns the represented socket index, or null for an unused grid cell. */
-  static Integer socketAt(ItemStack input, int gridSlot) {
-    if (input == null) return null;
-    try {
-      DevItemStack wrapped = ItemsPlugin.instance().factory().wrap(input);
-      if (!(wrapped.definition() instanceof SocketedVanillaItem definition)) return null;
-      List<EnchantmentSlot> sockets = definition.sockets();
-      for (int index = 0; index < sockets.size(); index++) if (gridPosition(index, sockets.size()) == gridSlot) return index;
-    } catch (RuntimeException ignored) {}
-    return null;
-  }
-
-  static int gridPosition(int index, int socketCount) {
-    int topCount = Math.min(5, socketCount);
-    if (index < topCount) return SOCKET_SLOTS[(5 - topCount) / 2 + index];
-    int bottomCount = socketCount - topCount;
-    return SOCKET_SLOTS[5 + (5 - bottomCount) / 2 + index - topCount];
-  }
-
-  static boolean socketIsFree(ItemStack input, int socket) {
-    if (input == null) return false;
-    try {
-      DevItemStack wrapped = ItemsPlugin.instance().factory().wrap(input);
-      return wrapped.definition() instanceof SocketedVanillaItem definition
-        && socket >= 0 && definition.freeSlots(wrapped).stream().anyMatch(slot -> slot.index() == socket);
-    } catch (RuntimeException ignored) {
-      return false;
-    }
-  }
-
-  private static boolean isBook(ItemStack item) {
-    return item != null && (item.getType() == Material.BOOK || item.getType() == Material.ENCHANTED_BOOK);
   }
 
   private ItemStack placeholder(ActiveMenu active, Player viewer) {
@@ -373,12 +274,22 @@ final class EnchantingMenuController implements Listener {
           ? "enchants.offer.empty.unsupported" : "enchants.offer.empty.already_enchanted";
         else if (wrapped.definition() instanceof SocketedVanillaItem) key =
           ((SocketedVanillaItem) wrapped.definition()).availableSlots(wrapped) == 0
-            ? "enchants.offer.empty.full_sockets" : "enchants.offer.empty.unsupported";
+            ? "enchants.offer.empty.full_sockets" : "enchants.offer.empty.no_candidates";
       } catch (RuntimeException ignored) {
         key = "enchants.offer.empty.unsupported";
       }
     }
     meta.setLore(wrap(viewer, Locale.get(viewer, key), false));
+    icon.setItemMeta(meta);
+    return icon;
+  }
+
+  /** An unused offer cell: a raw book that offers nothing. */
+  private ItemStack emptyOffer(Player viewer) {
+    ItemStack icon = new ItemStack(Material.BOOK);
+    ItemMeta meta = icon.getItemMeta();
+    meta.setDisplayName(Locale.get(viewer, "enchants.offer.empty.name"));
+    meta.setLore(wrap(viewer, Locale.get(viewer, "enchants.offer.empty.no_offer"), false));
     icon.setItemMeta(meta);
     return icon;
   }
@@ -447,7 +358,7 @@ final class EnchantingMenuController implements Listener {
     try {
       DevItemStack original = ItemsPlugin.instance().factory().wrap(input);
       if (!(original.definition() instanceof SocketedVanillaItem) || active.selectedSocket == null
-        || !socketIsFree(input, active.selectedSocket)) {
+        || !SocketMenuVisuals.socketIsFree(input, active.selectedSocket)) {
         regenerate(active); active.session.refresh(); return;
       }
       ItemStack result = input.clone();
