@@ -4,80 +4,65 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.bisz.items.CustomEnchantment;
-import dev.bisz.items.DevEnchantment;
 import dev.bisz.items.EnchantmentData;
 import dev.bisz.items.EnchantmentId;
 import dev.bisz.items.EnchantmentProperties;
+import dev.bisz.enchants.items.ImpactResistanceEnchantment;
+import dev.bisz.enchants.items.LethalityEnchantment;
+import dev.bisz.enchants.items.WingedEnchantment;
 import java.util.Map;
+import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 class GenerationModelTest {
-  @Test void bookshelfStatisticsAreUncapped() {
-    assertEquals(new BookshelfModifierData(35, 350), new BookshelfModifierData(35, 350));
+  @Test void bookshelfStatisticsRemainUncappedForDisplay() {
+    assertEquals(500, new BookshelfModifierData(50, 500).extraChancePercent());
   }
 
-  @Test void percentageProducesGuaranteedAndRemainderRolls() {
+  @Test void bookshelfRollsUseIndependentChancesAndCapAtFourExtras() {
     assertEquals(0, DefaultEnchantmentGenerator.extraRolls(0, fixed(0)));
-    assertEquals(3, DefaultEnchantmentGenerator.extraRolls(300, fixed(0)));
-    assertEquals(4, DefaultEnchantmentGenerator.extraRolls(350, fixed(49)));
-    assertEquals(3, DefaultEnchantmentGenerator.extraRolls(350, fixed(50)));
+    assertEquals(1, DefaultEnchantmentGenerator.extraRolls(99, fixed(0)));
+    assertEquals(0, DefaultEnchantmentGenerator.extraRolls(99, fixed(99)));
+    assertEquals(1, DefaultEnchantmentGenerator.extraRolls(100, fixed(99)));
+    assertEquals(4, DefaultEnchantmentGenerator.extraRolls(400, fixed(0)));
+    assertEquals(4, DefaultEnchantmentGenerator.extraRolls(1200, fixed(0)));
   }
 
-  @Test void bookshelfRollsAreCappedByPowerAndOfferTier() {
-    assertEquals(1, DefaultEnchantmentGenerator.extraRollsForTier(500, 0, fixed(0)));
-    assertEquals(2, DefaultEnchantmentGenerator.extraRollsForTier(500, 1, fixed(0)));
-    assertEquals(5, DefaultEnchantmentGenerator.extraRollsForTier(500, 2, fixed(0)));
-    assertEquals(5, DefaultEnchantmentGenerator.extraRollsForTier(1200, 2, fixed(0)));
-    assertEquals(3, DefaultEnchantmentGenerator.extraRollsForTier(350, 2, fixed(50)));
-    assertThrows(IllegalArgumentException.class, () -> DefaultEnchantmentGenerator.extraRollCap(3));
+  @Test void materialCostsUseTheSpecifiedRootsOffsetsAndMinimums() {
+    assertEquals(new EnchantingCosts.OfferCost(25, 1), EnchantingCosts.roll(0, fixed(0)));
+    assertEquals(new EnchantingCosts.OfferCost(39, 18), EnchantingCosts.roll(25, fixed(10)));
+  }
+
+  @Test void copiedYamlMaximumLevelsCoverCustomAndVanillaEnchantments() {
+    assertEquals(5, EnchantmentCatalog.maximumLevel(new LethalityEnchantment()));
+    assertEquals(4, EnchantmentCatalog.maximumLevel(new ImpactResistanceEnchantment()));
+    assertEquals(1, EnchantmentCatalog.maximumLevel(new WingedEnchantment()));
+  }
+
+  @Test void offersAreOrderedByExperienceThenLapis() {
+    TestEnchantment enchantment = new TestEnchantment();
+    List<EnchantmentOffer> ordered = DefaultEnchantmentGenerator.orderOffers(List.of(
+      new EnchantmentOffer(4, 2, Map.of(enchantment, new EnchantmentData(1)), Map.of()),
+      new EnchantmentOffer(2, 9, Map.of(enchantment, new EnchantmentData(1)), Map.of()),
+      new EnchantmentOffer(2, 3, Map.of(enchantment, new EnchantmentData(1)), Map.of())
+    ));
+    assertEquals(List.of(3, 9, 2), ordered.stream().map(EnchantmentOffer::lapisLazuli).toList());
   }
 
   @Test void offersValidateCostsAndDefensivelyCopyData() {
     TestEnchantment enchantment = new TestEnchantment();
-    EnchantmentOffer offer = new EnchantmentOffer(5, 10, Map.of(enchantment, new EnchantmentData(2)), Map.of());
+    EnchantmentOffer offer = new EnchantmentOffer(5, 10, Map.of(enchantment, new EnchantmentData(1)), Map.of());
     assertEquals(5, offer.experienceLevels());
-    assertEquals(10, offer.lapisLazuli());
     assertThrows(IllegalArgumentException.class, () -> new EnchantmentOffer(0, 1, offer.baseEnchantments(), Map.of()));
     assertThrows(IllegalArgumentException.class, () -> new EnchantmentOffer(1, 1, Map.of(), Map.of()));
   }
 
-  @Test void enchantmentCountsControlRoundedCostMultiplier() {
-    TestEnchantment first = new TestEnchantment("first");
-    TestEnchantment second = new TestEnchantment("second");
-    TestEnchantment third = new TestEnchantment("third");
-    double oneLevelOne = Math.log(4.134 + Math.E);
-    double threeWithOneUpgrade = Math.log(4.134 * 3 + 2 + Math.E);
-    assertEquals(oneLevelOne, DefaultEnchantmentGenerator.costMultiplier(
-      Map.of(first, new EnchantmentData(1)), Map.of()
-    ), 1.0e-12);
-    assertEquals(threeWithOneUpgrade, DefaultEnchantmentGenerator.costMultiplier(
-      Map.of(first, new EnchantmentData(2), second, new EnchantmentData(1)),
-      Map.of(third, new EnchantmentData(1))
-    ), 1.0e-12);
-    assertEquals(Math.round(5 * threeWithOneUpgrade),
-      DefaultEnchantmentGenerator.scaledCost(5, threeWithOneUpgrade));
-  }
-
-  @Test void offerRejectsInvalidCostMultipliers() {
-    TestEnchantment enchantment = new TestEnchantment();
-    Map<DevEnchantment, EnchantmentData> data = Map.of(enchantment, new EnchantmentData(1));
-    assertThrows(IllegalArgumentException.class, () -> new EnchantmentOffer(1, 1, 0, data, Map.of()));
-    assertThrows(IllegalArgumentException.class, () -> new EnchantmentOffer(1, 1, Double.NaN, data, Map.of()));
-  }
-
   private static Random fixed(int value) {
-    return new Random() {
-      @Override public int nextInt(int bound) { return Math.min(value, bound - 1); }
-    };
+    return new Random() { @Override public int nextInt(int bound) { return Math.min(value, bound - 1); } };
   }
 
   private static final class TestEnchantment extends CustomEnchantment {
-    private TestEnchantment() {
-      this("sample");
-    }
-    private TestEnchantment(String id) {
-      super(EnchantmentId.of("test", id), EnchantmentProperties.builder().build());
-    }
+    private TestEnchantment() { super(EnchantmentId.of("test", "sample"), EnchantmentProperties.builder().build()); }
   }
 }

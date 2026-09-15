@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 import org.bukkit.event.Listener;
+import org.bukkit.entity.Projectile;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -31,6 +33,7 @@ public final class ItemsPlugin extends JavaPlugin {
   private final ItemRegistry registry = new ItemRegistry();
   private final EnchantmentRegistry enchantments = new EnchantmentRegistry();
   private ItemFactory factory;
+  private EnchantmentRuntimeListener enchantmentRuntime;
 
   public static ItemsPlugin instance() {
     return Objects.requireNonNull(instance, "Items plugin is not loaded");
@@ -39,7 +42,7 @@ public final class ItemsPlugin extends JavaPlugin {
   public void onLoad() {
     instance = this;
     this.registry.registerVanillaItems();
-    this.registry.registerVanillaOverride(this, new WoodenSwordOverride());
+    this.registry.registerVanillaOverride(this, new ShieldOverride());
     this.enchantments.registerVanillaEnchantments();
     this.enchantments.register(this, new RainbowEnchantment());
   }
@@ -53,12 +56,9 @@ public final class ItemsPlugin extends JavaPlugin {
         (Listener) new ItemRuntimeListener(this, this.factory),
         (Plugin) this
       );
-    this.getServer()
-      .getPluginManager()
-      .registerEvents(
-        (Listener) new EnchantmentRuntimeListener(this, this.factory, this.registry, this.enchantments),
-        (Plugin) this
-      );
+    this.getServer().getPluginManager().registerEvents(new DamageableItemListener(this, this.factory), this);
+    this.enchantmentRuntime = new EnchantmentRuntimeListener(this, this.factory, this.registry, this.enchantments);
+    this.getServer().getPluginManager().registerEvents((Listener) this.enchantmentRuntime, (Plugin) this);
     CommandRegistery.register(
       (Plugin) this,
       (DevCommand) new GiveItemCommand(this.factory, this.registry)
@@ -96,6 +96,14 @@ public final class ItemsPlugin extends JavaPlugin {
 
   public EnchantmentRegistry enchantments() {
     return this.enchantments;
+  }
+
+  /** Associates a manually-created projectile with the exact weapon that fired it. */
+  public void captureProjectileSource(Projectile projectile, ItemStack weapon) {
+    Objects.requireNonNull(projectile, "projectile");
+    Objects.requireNonNull(weapon, "weapon");
+    Objects.requireNonNull(this.enchantmentRuntime, "Items plugin is not enabled")
+      .captureProjectileSource(projectile, weapon);
   }
 
   private void installLocaleDefaults() {

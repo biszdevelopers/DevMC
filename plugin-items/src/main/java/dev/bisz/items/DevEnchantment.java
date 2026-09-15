@@ -1,6 +1,7 @@
 package dev.bisz.items;
 
 import java.util.Objects;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 
@@ -26,6 +27,17 @@ public abstract class DevEnchantment {
     String color = properties.quality() == Quality.COMMON ? "§7" : properties.quality().colorCode();
     return color + renderName(viewer) + " " + RomanNumerals.format(level);
   }
+  /**
+   * Returns the localized description for one applied enchantment. The complete
+   * data object is supplied so implementations can describe future perk metadata.
+   */
+  protected String renderDescription(Player viewer, EnchantmentData data) {
+    return translate(
+      viewer,
+      "enchantment." + id.namespace() + "." + id.path() + ".description",
+      "A magical property applied to this item."
+    );
+  }
   protected void onHandTick(DevItemStack stack, int level, Player holder, EquipmentSlot hand) {}
   protected void onInventoryTick(DevItemStack stack, int level, Player holder, int slot) {}
   protected double modifyOutgoingDamage(EnchantmentDamageContext context, double damage) { return damage; }
@@ -35,6 +47,15 @@ public abstract class DevEnchantment {
   public final String displayName(Player viewer) { return renderName(viewer); }
   /** Returns this enchantment's normal localized lore line. */
   public final String displayLore(Player viewer, int level) { return renderLore(viewer, level); }
+  /** Returns this enchantment's localized description for the supplied item data. */
+  public String displayDescription(Player viewer, EnchantmentData data) {
+    return renderDescription(viewer, Objects.requireNonNull(data, "data"));
+  }
+  /** Allows descriptions to omit mechanics that do not apply to a material. */
+  public String displayDescription(Player viewer, EnchantmentData data, Material material) {
+    Objects.requireNonNull(material, "material");
+    return displayDescription(viewer, data);
+  }
   final String name(Player viewer) { return displayName(viewer); }
   final String lore(Player viewer, int level) { return displayLore(viewer, level); }
   final void handTick(DevItemStack stack, int level, Player holder, EquipmentSlot hand) { onHandTick(stack, level, holder, hand); }

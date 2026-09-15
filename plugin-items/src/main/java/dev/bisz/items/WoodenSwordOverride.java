@@ -7,7 +7,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 
 /** Built-in example that adds a persistent attack counter to vanilla wooden swords. */
-public final class WoodenSwordOverride extends OverrideVanillaItem {
+public final class WoodenSwordOverride extends OverrideDamageableVanillaItem {
 
   public static final String ATTACK_TIMES = "attack_times";
 

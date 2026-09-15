@@ -36,7 +36,9 @@ public abstract class CustomEnchantingModifier {
   public final List<String> renderLore(Player player, EnchantingModifierData data) {
     ArrayList<String> lines = new ArrayList<>();
     lines.add("");
-    String marker = mode == ModifierMode.PERMANENT ? "§d✦" : "§e✌";
+    String marker = Locale.get(player, mode == ModifierMode.PERMANENT
+      ? "enchants.modifier.marker.permanent"
+      : "enchants.modifier.marker.consumable");
     lines.add(Locale.get(player, "enchants.modifier.amount", marker, data.blockCount(), Locale.get(player, nounLocaleKey())));
     int effectPercent = effectPercent(data);
     int maximumPercent = maximumEffectPercent();

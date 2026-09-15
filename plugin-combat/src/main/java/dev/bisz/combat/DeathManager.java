@@ -3,6 +3,7 @@ package dev.bisz.combat;
 import dev.bisz.bundler.BundlerPlugin;
 import dev.bisz.chat.ChatUtils;
 import dev.bisz.combat.items.*;
+import dev.bisz.enchants.LinearExperience;
 import dev.bisz.items.*;
 import dev.bisz.menus.*;
 import dev.bisz.npc.*;
@@ -230,7 +231,7 @@ public final class DeathManager implements Listener, CombatService {
     p.setFlying(true);
     p.setCollidable(false);
     p.setCanPickupItems(false);
-    p.setHealth(Math.max(1, p.getHealth()));
+    restoreHealth(p);
     p.setFoodLevel(20);
     p.getInventory().setItem(4, reviveItem(p));
   }
@@ -256,6 +257,7 @@ public final class DeathManager implements Listener, CombatService {
     p.setFlying(g.allowFlight && g.flying);
     p.setCollidable(g.collidable);
     p.setCanPickupItems(g.pickup);
+    restoreHealth(p);
     for (Player viewer : Bukkit.getOnlinePlayers())
       viewer.showPlayer(plugin, p);
     p.teleport(safe(g.anchor(), p));
@@ -266,6 +268,13 @@ public final class DeathManager implements Listener, CombatService {
     p.removePotionEffect(PotionEffectType.NIGHT_VISION);
     p.removePotionEffect(PotionEffectType.INVISIBILITY);
     return true;
+  }
+
+  private void restoreHealth(Player p) {
+    p.setHealth(20.0);
+    Bukkit.getScheduler().runTask(plugin, () -> {
+      if (p.isOnline() && !p.isDead()) p.setHealth(20.0);
+    });
   }
 
   private Location safe(Location center, Player p) {
@@ -874,16 +883,7 @@ public final class DeathManager implements Listener, CombatService {
   }
 
   public static int totalXp(Player p) {
-    int level = p.getLevel();
-    int base = level <= 16
-      ? level * level + 6 * level
-      : level <= 31
-        ? (int) (2.5 * level * level - 40.5 * level + 360)
-        : (int) (4.5 * level * level - 162.5 * level + 2220);
-    int next = level <= 15
-      ? 2 * level + 7
-      : level <= 30 ? 5 * level - 38 : 9 * level - 158;
-    return base + Math.round(p.getExp() * next);
+    return LinearExperience.totalPoints(p);
   }
 
   private static String human(String s) {

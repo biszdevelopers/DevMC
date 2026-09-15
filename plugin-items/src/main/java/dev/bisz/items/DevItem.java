@@ -96,8 +96,23 @@ public abstract class DevItem {
     return List.of();
   }
 
+  /** Renders status lines between the item header and its enchantments. */
+  protected List<String> renderStatusLore(DevItemStack stack, Player viewer) {
+    return List.of();
+  }
+
   protected String renderName(DevItemStack stack, Player viewer) {
     return null;
+  }
+
+  /**
+   * Renders the enchantment portion of this item's lore.
+   *
+   * <p>Vanilla overrides may replace this section without reimplementing the
+   * common name, quality, category, or custom-lore pipeline.</p>
+   */
+  protected List<String> renderEnchantmentLore(DevItemStack stack, Player viewer) {
+    return stack.renderEnchantmentLore(viewer);
   }
 
   final void load(DevItemStack stack) {
@@ -139,9 +154,16 @@ public abstract class DevItem {
       });
     // Build enchantment lore before invoking custom renderLore: subclasses may
     // inspect the final enchantment state as part of their own render process.
-    List<String> enchantments = stack.renderEnchantmentLore(viewer);
-    List<String> extraLore = this.renderLore(stack, viewer);
-    stack.applyDisplay(this.properties.quality().colorCode() + name, enchantments, extraLore, language);
+    List<String> enchantments = this.renderEnchantmentLore(stack, viewer);
+    List<String> statusLore = this.renderStatusLore(stack, viewer);
+    List<String> itemLore = this.renderLore(stack, viewer);
+    List<String> abilityLore = this instanceof AbilityItem abilityItem
+      ? AbilityDisplay.render(abilityItem.abilities(stack), viewer)
+      : List.of();
+    java.util.ArrayList<String> extraLore = new java.util.ArrayList<>(abilityLore);
+    if (!abilityLore.isEmpty() && !itemLore.isEmpty()) extraLore.add("");
+    extraLore.addAll(itemLore);
+    stack.applyDisplay(this.properties.quality().colorCode() + name, statusLore, enchantments, extraLore, language);
   }
 
   public final Material material() {

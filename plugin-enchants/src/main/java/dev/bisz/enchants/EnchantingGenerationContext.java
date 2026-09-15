@@ -9,12 +9,18 @@ import org.bukkit.inventory.ItemStack;
 public record EnchantingGenerationContext(
   ItemStack item,
   List<EnchantingModifierData> modifiers,
-  RandomGenerator random
+  RandomGenerator random,
+  int selectedSocket
 ) {
   public EnchantingGenerationContext {
     item = Objects.requireNonNull(item, "item").clone();
     modifiers = List.copyOf(Objects.requireNonNull(modifiers, "modifiers"));
     random = Objects.requireNonNull(random, "random");
+    if (selectedSocket < 0) throw new IllegalArgumentException("selectedSocket must be a socket index");
+  }
+  /** Compatibility constructor targeting the first socket. */
+  public EnchantingGenerationContext(ItemStack item, List<EnchantingModifierData> modifiers, RandomGenerator random) {
+    this(item, modifiers, random, 0);
   }
   @Override public ItemStack item() { return item.clone(); }
 }

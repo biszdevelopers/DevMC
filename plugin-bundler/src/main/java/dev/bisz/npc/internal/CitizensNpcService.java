@@ -89,9 +89,10 @@ public final class CitizensNpcService implements NpcService {
     }
   }
 
-  private void configureNameplate(Object npc, boolean visible) {
+  void configureNameplate(Object npc, boolean visible) {
     try {
-      Object data = npc.getClass().getMethod("data").invoke(npc);
+      Class<?> npcType = Class.forName("net.citizensnpcs.api.npc.NPC");
+      Object data = npcType.getMethod("data").invoke(npc);
       String key = "nameplate-visible";
       try {
         Class<?> metadata = Class.forName(
@@ -100,8 +101,7 @@ public final class CitizensNpcService implements NpcService {
         Object nameplate = metadata.getField("NAMEPLATE_VISIBLE").get(null);
         key = String.valueOf(metadata.getMethod("getKey").invoke(nameplate));
       } catch (ReflectiveOperationException ignored) {}
-      data
-        .getClass()
+      Class.forName("net.citizensnpcs.api.npc.MetadataStore")
         .getMethod("setPersistent", String.class, Object.class)
         .invoke(data, key, visible);
     } catch (ReflectiveOperationException e) {

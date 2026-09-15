@@ -103,9 +103,7 @@ public final class PagedStorageMenuTemplate extends MenuTemplate {
     Integer shownPrevious = page > 1 ? previousSlot : null;
     Integer shownNext = page < pageCount ? nextSlot : null;
     if (shownPrevious != null) items.put(shownPrevious, previousItem);
-    else if (previousSlot != null) items.remove(previousSlot);
     if (shownNext != null) items.put(shownNext, nextItem);
-    else if (nextSlot != null) items.remove(nextSlot);
     return new RenderedMenuPage(
       page,
       pageCount,
@@ -266,11 +264,12 @@ public final class PagedStorageMenuTemplate extends MenuTemplate {
       ) throw new IllegalStateException(
         "Next button conflicts with another slot"
       );
-      // Storage and paging controls are authoritative over decorative base items.
-      items.keySet().removeIf(reserved::contains);
+      // Storage is authoritative over decoration. Navigation controls temporarily
+      // replace decoration while available, leaving it as a static fallback.
+      items.keySet().removeIf(viewportSlots::contains);
       for (Map.Entry<Integer, PageOverride> entry : pageOverrides.entrySet()) {
-        entry.getValue().items.keySet().removeIf(reserved::contains);
-        entry.getValue().removed.removeIf(reserved::contains);
+        entry.getValue().items.keySet().removeIf(viewportSlots::contains);
+        entry.getValue().removed.removeIf(viewportSlots::contains);
       }
       return new PagedStorageMenuTemplate(this);
     }

@@ -70,6 +70,12 @@ Items also registers `items:rainbow` as a built-in visual test enchantment. It h
 
 ## Threading and data
 
+Plugins can listen for `ItemHandEquipEvent` and `ItemHandUnequipEvent` to react
+when a resolved ItemLib stack enters or leaves either `EquipmentSlot.HAND` or
+`EquipmentSlot.OFF_HAND`. The events are transition based rather than tick
+callbacks and expose the player, hand, and `DevItemStack` through both concise
+accessors and conventional Bukkit getters.
+
 Registry setup, Bukkit stack reads/writes, rendering, and inventory operations are main-thread operations. Item state uses Bukkit Persistent Data Containers only. The serializer uses a versioned Bukkit byte envelope and deliberately does not read historical NBT or ItemLib payloads.
 
 ## Commands and migration

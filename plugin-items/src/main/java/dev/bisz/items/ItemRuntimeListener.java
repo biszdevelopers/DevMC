@@ -34,6 +34,8 @@ import dev.bisz.items.ItemsPlugin;
 import dev.bisz.menus.MenuInventoryHolder;
 import dev.bisz.players.locales.PlayerLocaleUpdateEvent;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.UUID;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
@@ -47,6 +49,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.enchantment.EnchantItemEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
@@ -55,8 +58,14 @@ import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.inventory.PrepareSmithingEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
@@ -64,10 +73,15 @@ final class ItemRuntimeListener implements Listener {
 
   private final ItemsPlugin plugin;
   private final ItemFactory factory;
+  private final Map<UUID, HandSnapshot> hands = new HashMap<>();
 
   ItemRuntimeListener(ItemsPlugin plugin, ItemFactory factory) {
     this.plugin = plugin;
     this.factory = factory;
+    // Also establish hand state after a plugin reload, when already-online
+    // players will not produce another PlayerJoinEvent.
+    this.plugin.getServer().getScheduler().runTask((Plugin) this.plugin,
+      () -> this.plugin.getServer().getOnlinePlayers().forEach(this::reconcileHands));
   }
 
   @EventHandler(priority = EventPriority.MONITOR)
@@ -82,6 +96,7 @@ final class ItemRuntimeListener implements Listener {
       .runTask((Plugin) this.plugin, () -> {
         if (event.getPlayer().isOnline()) {
           this.refreshInventory(event.getPlayer());
+          this.reconcileHands(event.getPlayer());
         }
       });
   }
@@ -97,6 +112,7 @@ final class ItemRuntimeListener implements Listener {
     if (rendered != null) {
       event.getItem().setItemStack(rendered);
     }
+    this.reconcileHandsLater(player);
   }
 
   @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -160,6 +176,23 @@ final class ItemRuntimeListener implements Listener {
     }
   }
 
+  @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+  void onInvalidShiftPlacement(InventoryClickEvent event) {
+    if (isInvalidShiftPlacement(
+      event.isShiftClick(),
+      event.getCurrentItem(),
+      event.getCursor()
+    )) event.setCancelled(true);
+  }
+
+  static boolean isInvalidShiftPlacement(
+    boolean shiftClick,
+    ItemStack current,
+    ItemStack cursor
+  ) {
+    return shiftClick && empty(current) && !empty(cursor);
+  }
+
   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
   void onInventoryClick(InventoryClickEvent event) {
     HumanEntity humanEntity = event.getWhoClicked();
@@ -178,7 +211,33 @@ final class ItemRuntimeListener implements Listener {
         if (!(top.getHolder() instanceof MenuInventoryHolder)) {
           this.refreshInventory(top, player);
         }
+        this.reconcileHands(player);
       });
+  }
+
+  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+  void onInventoryDrag(InventoryDragEvent event) {
+    if (event.getWhoClicked() instanceof Player player) reconcileHandsLater(player);
+  }
+
+  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+  void onHeldItem(PlayerItemHeldEvent event) { reconcileHandsLater(event.getPlayer()); }
+
+  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+  void onSwapHands(PlayerSwapHandItemsEvent event) { reconcileHandsLater(event.getPlayer()); }
+
+  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+  void onDrop(PlayerDropItemEvent event) { reconcileHandsLater(event.getPlayer()); }
+
+  @EventHandler(priority = EventPriority.MONITOR)
+  void onRespawn(PlayerRespawnEvent event) { reconcileHandsLater(event.getPlayer()); }
+
+  @EventHandler(priority = EventPriority.MONITOR)
+  void onQuit(PlayerQuitEvent event) {
+    HandSnapshot previous = hands.remove(event.getPlayer().getUniqueId());
+    if (previous == null) return;
+    fireUnequip(event.getPlayer(), EquipmentSlot.HAND, previous.mainHand());
+    fireUnequip(event.getPlayer(), EquipmentSlot.OFF_HAND, previous.offHand());
   }
 
   @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -402,6 +461,63 @@ final class ItemRuntimeListener implements Listener {
   private void refreshInventory(Player player) {
     this.refreshInventory((Inventory) player.getInventory(), player);
   }
+
+  private void reconcileHandsLater(Player player) {
+    this.plugin.getServer().getScheduler().runTask((Plugin) this.plugin, () -> {
+      if (player.isOnline()) reconcileHands(player);
+    });
+  }
+
+  private void reconcileHands(Player player) {
+    ItemStack main = player.getInventory().getItemInMainHand();
+    ItemStack off = player.getInventory().getItemInOffHand();
+    int heldSlot = player.getInventory().getHeldItemSlot();
+    HandSnapshot previous = hands.get(player.getUniqueId());
+    if (previous == null) {
+      fireEquip(player, EquipmentSlot.HAND, main);
+      fireEquip(player, EquipmentSlot.OFF_HAND, off);
+    } else {
+      boolean mainChanged = previous.heldSlot() != heldSlot || !sameItem(previous.mainHand(), main);
+      boolean offChanged = !sameItem(previous.offHand(), off);
+      if (mainChanged) fireUnequip(player, EquipmentSlot.HAND, previous.mainHand());
+      if (offChanged) fireUnequip(player, EquipmentSlot.OFF_HAND, previous.offHand());
+      if (mainChanged) fireEquip(player, EquipmentSlot.HAND, main);
+      if (offChanged) fireEquip(player, EquipmentSlot.OFF_HAND, off);
+    }
+    hands.put(player.getUniqueId(), new HandSnapshot(heldSlot, main, off));
+  }
+
+  private boolean sameItem(ItemStack left, ItemStack right) {
+    if (left == right) return true;
+    if (empty(left) || empty(right)) return empty(left) && empty(right);
+    try {
+      return factory.wrap(left).sameItem(factory.wrap(right));
+    } catch (RuntimeException ignored) {
+      return left.isSimilar(right);
+    }
+  }
+
+  private void fireEquip(Player player, EquipmentSlot hand, ItemStack item) {
+    if (empty(item)) return;
+    try {
+      plugin.getServer().getPluginManager().callEvent(new ItemHandEquipEvent(player, hand, factory.wrap(item)));
+    } catch (RuntimeException exception) {
+      logFailure(item, exception);
+    }
+  }
+
+  private void fireUnequip(Player player, EquipmentSlot hand, ItemStack item) {
+    if (empty(item)) return;
+    try {
+      plugin.getServer().getPluginManager().callEvent(new ItemHandUnequipEvent(player, hand, factory.wrap(item)));
+    } catch (RuntimeException exception) {
+      logFailure(item, exception);
+    }
+  }
+
+  private static boolean empty(ItemStack item) { return item == null || item.getType().isAir(); }
+
+  private record HandSnapshot(int heldSlot, ItemStack mainHand, ItemStack offHand) {}
 
   private void refreshInventory(Inventory inventory, Player player) {
     for (int slot = 0; slot < inventory.getSize(); ++slot) {

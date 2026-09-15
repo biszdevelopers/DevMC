@@ -54,6 +54,11 @@ public final class ItemStackSerializer {
     }
   }
 
+  /** Serializes a stack into the version implied by this ItemLib build. */
+  public static String serializePayload(ItemStack stack) {
+    return serialize(stack).get("data");
+  }
+
   public static ItemStack deserialize(Map<String, String> encoded) {
     Objects.requireNonNull(encoded, "encoded");
     if (!FORMAT.equals(encoded.get("format"))) {
@@ -82,5 +87,10 @@ public final class ItemStackSerializer {
         exception
       );
     }
+  }
+
+  /** Deserializes a payload previously returned by {@link #serializePayload}. */
+  public static ItemStack deserializePayload(String payload) {
+    return deserialize(Map.of("format", FORMAT, "data", Objects.requireNonNull(payload, "payload")));
   }
 }

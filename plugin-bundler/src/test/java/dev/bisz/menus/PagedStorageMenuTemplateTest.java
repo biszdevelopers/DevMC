@@ -66,18 +66,18 @@ class PagedStorageMenuTemplateTest {
   }
 
   @Test
-  void navigationControlsOverrideStaticAndPerPageItems() {
+  void navigationControlsOverrideStaticItemsAndLeaveThemAsFallback() {
     MutableProvider provider = new MutableProvider(2);
     MenuItem previous = item();
+    MenuItem staticItem = item();
     var template = PagedStorageMenuTemplate.builder("Precedence", 1)
       .storage(provider)
       .storageSlots(1)
-      .item(0, item())
+      .item(0, staticItem)
       .previousButton(0, previous)
-      .pageItem(2, 0, item())
       .build();
 
-    assertFalse(template.render(null, 1, provider).items().containsKey(0));
+    assertSame(staticItem, template.render(null, 1, provider).items().get(0));
     assertSame(previous, template.render(null, 2, provider).items().get(0));
   }
 

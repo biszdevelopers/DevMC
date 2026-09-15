@@ -308,6 +308,16 @@ public final class MenuManager implements Listener {
       !(event.getWhoClicked() instanceof Player player) ||
       player != active.player
     ) return;
+    if (isInvalidShiftPlacement(
+      event.isShiftClick(),
+      event.getCurrentItem(),
+      event.getCursor()
+    )) {
+      player.setItemOnCursor(clean(event.getCursor()));
+      render(active);
+      Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+      return;
+    }
     if (isMenuItem(player.getItemOnCursor())) {
       player.setItemOnCursor(null);
       reportCleanup(player, 1);
@@ -1014,6 +1024,14 @@ public final class MenuManager implements Listener {
 
   private static boolean isEmpty(ItemStack item) {
     return item == null || item.getType().isAir() || item.getAmount() <= 0;
+  }
+
+  static boolean isInvalidShiftPlacement(
+    boolean shiftClick,
+    ItemStack current,
+    ItemStack cursor
+  ) {
+    return shiftClick && isEmpty(current) && !isEmpty(cursor);
   }
 
   private static ItemStack copy(ItemStack item) {

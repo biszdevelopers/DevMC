@@ -60,6 +60,18 @@ public final class CorpseHeadItem extends CustomItem {
     long a = s.metadata("death_time")
             .map(Long.class::cast)
             .orElse(0L);
+    String cause = String.valueOf(s.metadata("cause").orElse("unknown"));
+    String causeId = cause.isBlank()
+      ? "unknown"
+      : cause.toLowerCase(java.util.Locale.ROOT);
+    if (causeId.startsWith("player.death.")) {
+      causeId = causeId.substring("player.death.".length());
+    }
+    String translatedCause = translate(
+      v,
+      "player.death." + causeId,
+      humanize(causeId)
+    );
 
     return List.of(
             translate(
@@ -72,15 +84,22 @@ public final class CorpseHeadItem extends CustomItem {
         v,
         "combat.item.corpse_head.cause",
         "Cause: %s",
-        s.metadata("cause").orElse("unknown")
+        translatedCause
       ),
       translate(
         v,
         "combat.item.corpse_head.killer",
         "Killer: %s",
-        s.metadata("killer").orElse("none")
+        s.metadata("killer").orElse(translate(v, "combat.item.corpse_head.none", "none"))
       ),
             translate(v, "combat.item.corpse_head.death_time", "TOD: %s", formatMillis(a, v))
     );
+  }
+
+  private static String humanize(String value) {
+    String spaced = value.toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+    return spaced.isEmpty()
+      ? "Unknown"
+      : Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
   }
 }

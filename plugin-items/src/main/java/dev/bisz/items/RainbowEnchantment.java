@@ -19,4 +19,8 @@ public final class RainbowEnchantment extends CustomEnchantment {
     }
     return rendered.toString();
   }
+
+  @Override protected String renderDescription(Player viewer, EnchantmentData data) {
+    return translate(viewer, "enchantment.items.rainbow.description", "Shimmers through every color of the rainbow.");
+  }
 }

@@ -20,11 +20,12 @@ import org.bukkit.plugin.Plugin;
 
 /** Central, opt-in dispatcher for custom item/enchantment ticking and damage hooks. */
 final class EnchantmentRuntimeListener implements Listener {
+  private static final long PROJECTILE_SOURCE_LIFETIME_MILLIS = 5L * 60L * 1_000L;
   private final ItemsPlugin plugin;
   private final ItemFactory factory;
   private final ItemRegistry items;
   private final EnchantmentRegistry enchantments;
-  private final Map<UUID, ItemStack> projectileSources = new HashMap<>();
+  private final Map<UUID, ProjectileSource> projectileSources = new HashMap<>();
 
   EnchantmentRuntimeListener(ItemsPlugin plugin, ItemFactory factory, ItemRegistry items, EnchantmentRegistry enchantments) {
     this.plugin = plugin; this.factory = factory; this.items = items; this.enchantments = enchantments;
@@ -32,6 +33,10 @@ final class EnchantmentRuntimeListener implements Listener {
   }
 
   private void tick() {
+    if (!projectileSources.isEmpty()) {
+      long now = System.currentTimeMillis();
+      projectileSources.values().removeIf(source -> source.expiresAt() <= now);
+    }
     if (!items.hasTickingDefinitions() && !enchantments.hasTickingDefinitions()) return;
     for (Player player : plugin.getServer().getOnlinePlayers()) {
       int selected = player.getInventory().getHeldItemSlot();
@@ -69,7 +74,11 @@ final class EnchantmentRuntimeListener implements Listener {
   void outgoingDamage(EntityDamageByEntityEvent event) {
     Player holder = null; ItemStack source = null; boolean projectile = event.getDamager() instanceof Projectile;
     if (event.getDamager() instanceof Player player) { holder = player; source = player.getInventory().getItemInMainHand(); }
-    else if (event.getDamager() instanceof Projectile shot && shot.getShooter() instanceof Player player) { holder = player; source = projectileSources.get(shot.getUniqueId()); }
+    else if (event.getDamager() instanceof Projectile shot && shot.getShooter() instanceof Player player) {
+      holder = player;
+      ProjectileSource captured = projectileSources.get(shot.getUniqueId());
+      source = captured == null ? null : captured.item();
+    }
     if (holder == null || source == null || source.getType().isAir()) return;
     applyDamage(event, holder, event.getEntity(), source, false, projectile);
   }
@@ -117,12 +126,28 @@ final class EnchantmentRuntimeListener implements Listener {
   }
   @EventHandler(ignoreCancelled = true)
   void captureBow(EntityShootBowEvent event) {
-    if (event.getEntity() instanceof Player player && event.getProjectile() instanceof Projectile projectile) projectileSources.put(projectile.getUniqueId(), event.getBow().clone());
+    ItemStack bow = event.getBow();
+    if (event.getEntity() instanceof Player && event.getProjectile() instanceof Projectile projectile && bow != null)
+      captureProjectileSource(projectile, bow);
   }
   @EventHandler(ignoreCancelled = true)
   void captureProjectile(ProjectileLaunchEvent event) {
-    if (event.getEntity().getShooter() instanceof Player player) projectileSources.putIfAbsent(event.getEntity().getUniqueId(), player.getInventory().getItemInMainHand().clone());
+    if (event.getEntity().getShooter() instanceof Player player)
+      projectileSources.computeIfAbsent(event.getEntity().getUniqueId(), ignored -> projectileSource(player.getInventory().getItemInMainHand()));
   }
-  @EventHandler void clearProjectile(ProjectileHitEvent event) { projectileSources.remove(event.getEntity().getUniqueId()); }
+  @EventHandler void clearProjectile(ProjectileHitEvent event) {
+    // Bukkit emits this before EntityDamageByEntityEvent. Entity hits must retain
+    // their weapon snapshot for that damage event and later pierce hits.
+    if (shouldClearProjectileSource(event.getHitEntity() != null))
+      projectileSources.remove(event.getEntity().getUniqueId());
+  }
+  void captureProjectileSource(Projectile projectile, ItemStack item) {
+    projectileSources.put(projectile.getUniqueId(), projectileSource(item));
+  }
+  private static ProjectileSource projectileSource(ItemStack item) {
+    return new ProjectileSource(item.clone(), System.currentTimeMillis() + PROJECTILE_SOURCE_LIFETIME_MILLIS);
+  }
+  static boolean shouldClearProjectileSource(boolean hitEntity) { return !hitEntity; }
+  private record ProjectileSource(ItemStack item, long expiresAt) {}
   private void log(String operation, RuntimeException exception) { plugin.getLogger().warning("Could not run ItemLib " + operation + ": " + exception.getMessage()); }
 }

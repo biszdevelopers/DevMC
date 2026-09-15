@@ -18,6 +18,7 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -215,7 +216,10 @@ public final class DevItemStack {
     for (EnchantmentId id : enchantmentLevels().keySet()) {
       Map<NamespacedKey, Object> leftValues = leftAll.getOrDefault(id, Map.of());
       Map<NamespacedKey, Object> rightValues = rightAll.getOrDefault(id, Map.of());
-      Map<NamespacedKey, Object> values = mergeMetadataValues(leftValues, rightValues);
+      // Retain metadata when an enchantment is carried from one anvil input;
+      // otherwise a repair/rename would silently reset stateful enchantments.
+      Map<NamespacedKey, Object> values = leftValues.isEmpty() ? rightValues
+        : rightValues.isEmpty() ? leftValues : mergeMetadataValues(leftValues, rightValues);
       if (!values.isEmpty()) merged.put(id, values);
     }
     writeEnchantmentMetadata(merged);
@@ -266,7 +270,7 @@ public final class DevItemStack {
   public void appendRuntimeLore(String line) { runtimeLore.add(Objects.requireNonNull(line, "line")); }
 
   List<String> renderEnchantmentLore(Player viewer) {
-    List<String> lore = new ArrayList<>(); EnchantmentRegistry registry = ItemsPlugin.instance().enchantments();
+    EnchantmentRegistry registry = ItemsPlugin.instance().enchantments();
     Map<EnchantmentId, Map<NamespacedKey, Object>> metadata = enchantmentMetadataValues();
     List<Map.Entry<EnchantmentId, Integer>> entries = new ArrayList<>(enchantmentLevels().entrySet());
     entries.sort((left, right) -> {
@@ -279,28 +283,33 @@ public final class DevItemStack {
       return nameOf(left.getKey(), leftEnchantment, viewer).toLowerCase(Locale.ROOT)
         .compareTo(nameOf(right.getKey(), rightEnchantment, viewer).toLowerCase(Locale.ROOT));
     });
+    Map<DevEnchantment, EnchantmentData> known = new LinkedHashMap<>();
+    List<String> unknown = new ArrayList<>();
     for (Map.Entry<EnchantmentId, Integer> entry : entries) {
       DevEnchantment enchantment = registry.get(entry.getKey()).orElse(null);
       if (enchantment == null) {
         String plain = ItemTranslations.humanize(entry.getKey().path()) + " " + RomanNumerals.format(entry.getValue());
-        lore.add(EnchantmentDisplay.extraRoll(metadata.getOrDefault(entry.getKey(), Map.of())) ? "§e✎ " + plain : "§7" + plain);
+        unknown.add(EnchantmentDisplay.extraRoll(metadata.getOrDefault(entry.getKey(), Map.of())) ? "§e✎ " + plain : "§7" + plain);
       } else {
-        lore.add(EnchantmentDisplay.renderLine(
-          enchantment,
-          new EnchantmentData(entry.getValue(), metadata.getOrDefault(entry.getKey(), Map.of())),
-          viewer
-        ));
+        known.put(enchantment, new EnchantmentData(entry.getValue(), metadata.getOrDefault(entry.getKey(), Map.of())));
       }
     }
+    List<String> lore = new ArrayList<>(EnchantmentDisplay.renderEntries(known, viewer, entries.size() <= 5));
+    if (!unknown.isEmpty() && !lore.isEmpty()) lore.add("");
+    lore.addAll(unknown);
     return lore;
   }
-  void applyDisplay(String name, List<String> enchantmentLore, List<String> extraLore, String language) {
+  void applyDisplay(String name, List<String> statusLore, List<String> enchantmentLore, List<String> extraLore, String language) {
     ItemMeta meta = bukkit.getItemMeta(); if (meta == null) return;
     meta.addItemFlags(ItemFlag.values()); meta.setDisplayName(name); List<String> lore = new ArrayList<>();
     String quality = ItemTranslations.translate(language, "itemmeta.quality." + definition.properties().quality().name(), ItemTranslations.humanize(definition.properties().quality().name()));
     lore.add(ItemTranslations.translate(language, "itemmeta.general.quality", "§7Quality: %s", definition.properties().quality().colorCode() + quality));
     if (!definition.properties().tradeable()) lore.add("§6🚷 " + ItemTranslations.translate(language, "itemmeta.untradable", "Not tradeable"));
     if (!definition.properties().category().isEmpty()) lore.add("§8" + ItemTranslations.translate(language, "itemmeta.category." + definition.properties().category(), definition.properties().category()));
+    if (!statusLore.isEmpty()) {
+      lore.add(" ");
+      lore.addAll(statusLore);
+    }
     if (!enchantmentLore.isEmpty()) {
       lore.add(" ");
       lore.addAll(enchantmentLore);
@@ -336,8 +345,11 @@ public final class DevItemStack {
   }
 
   private String renderSignature() {
-    StringBuilder result = new StringBuilder("v3|definition=")
+    StringBuilder result = new StringBuilder("v6|definition=")
       .append(definition.getClass().getName());
+    if (bukkit.getItemMeta() instanceof Damageable damageable) result
+      .append("|damage=")
+      .append(damageable.getDamage());
     customName().ifPresent(value -> result
       .append("|name=")
       .append(value.length())
@@ -360,7 +372,7 @@ public final class DevItemStack {
     String encoded = encodeCustomEnchantments(entries);
     edit(container -> { if (encoded == null) container.remove(key(CUSTOM_ENCHANTMENTS_KEY)); else container.set(key(CUSTOM_ENCHANTMENTS_KEY), PersistentDataType.STRING, encoded); });
   }
-  private void invalidateRender() {
+  void invalidateRender() {
     edit(DevItemStack::clearRenderSignature);
   }
 

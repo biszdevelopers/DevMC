@@ -1,5 +1,6 @@
 package dev.bisz.combat.items;
 
+import dev.bisz.enchants.LinearExperience;
 import dev.bisz.items.*;
 import java.util.List;
 import org.bukkit.*;
@@ -58,6 +59,6 @@ public final class ExperienceBottleItem extends CustomItem {
   @Override
   protected void onConsumed(DevItemStack s, Player consumer) {
     int points = (Integer) s.metadata("xp_points").orElse(0);
-    if (points > 0) consumer.giveExp(points);
+    if (points > 0) LinearExperience.addPoints(consumer, points);
   }
 }
