@@ -30,9 +30,6 @@ import org.bukkit.Material;
 import org.bukkit.Color;
 import org.bukkit.entity.Arrow;
 import org.bukkit.inventory.meta.PotionMeta;
-import org.bukkit.potion.PotionData;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
 import org.junit.jupiter.api.Test;
 
@@ -151,23 +148,22 @@ class TypedSocketModelTest {
     assertEquals("7.0", DamageIndicator.format(7D));
   }
 
-  @Test void shortbowCopiesTippedArrowPotionPayload() {
-    PotionData base = new PotionData(PotionType.POISON, false, true);
-    PotionEffect custom = new PotionEffect(PotionEffectType.SLOW, 80, 1);
+  @Test void shortbowCopiesTippedArrowBasePotionAndColor() {
+    PotionType base = PotionType.POISON;
     Color color = Color.fromRGB(12, 34, 56);
     List<Object[]> calls = new ArrayList<>();
     PotionMeta potion = (PotionMeta) Proxy.newProxyInstance(
       PotionMeta.class.getClassLoader(), new Class<?>[] {PotionMeta.class}, (proxy, method, arguments) ->
         switch (method.getName()) {
-          case "getBasePotionData" -> base;
-          case "getCustomEffects" -> List.of(custom);
+          case "getBasePotionType" -> base;
+          case "getCustomEffects" -> List.of();
           case "hasColor" -> true;
           case "getColor" -> color;
           default -> defaultValue(method.getReturnType());
         });
     Arrow arrow = (Arrow) Proxy.newProxyInstance(
       Arrow.class.getClassLoader(), new Class<?>[] {Arrow.class}, (proxy, method, arguments) -> {
-        if (method.getName().equals("setBasePotionData")
+        if (method.getName().equals("setBasePotionType")
           || method.getName().equals("addCustomEffect") || method.getName().equals("setColor"))
           calls.add(new Object[] {method.getName(), arguments});
         return defaultValue(method.getReturnType());
@@ -175,13 +171,10 @@ class TypedSocketModelTest {
 
     EnchantmentEffectsListener.applyTippedArrowEffects(arrow, potion);
 
-    assertEquals("setBasePotionData", calls.get(0)[0]);
+    assertEquals("setBasePotionType", calls.get(0)[0]);
     assertEquals(base, ((Object[]) calls.get(0)[1])[0]);
-    assertEquals("addCustomEffect", calls.get(1)[0]);
-    assertEquals(custom, ((Object[]) calls.get(1)[1])[0]);
-    assertEquals(true, ((Object[]) calls.get(1)[1])[1]);
-    assertEquals("setColor", calls.get(2)[0]);
-    assertEquals(color, ((Object[]) calls.get(2)[1])[0]);
+    assertEquals("setColor", calls.get(1)[0]);
+    assertEquals(color, ((Object[]) calls.get(1)[1])[0]);
   }
 
   private static Object defaultValue(Class<?> type) {

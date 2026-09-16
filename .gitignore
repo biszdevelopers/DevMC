@@ -17,7 +17,10 @@ buildNumber.properties
 .classpath
 
 mc-local/
-development-runner/
+development-runner/data/
+development-runner/assets/
+development-runner/**/__pycache__/
+development-runner/**/*.pyc
 .idea/
 .idea
 *.iml

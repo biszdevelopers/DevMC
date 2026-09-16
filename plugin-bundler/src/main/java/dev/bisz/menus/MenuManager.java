@@ -1076,7 +1076,11 @@ public final class MenuManager implements Listener {
   }
 
   private static boolean isEmpty(ItemStack item) {
-    return item == null || item.getType().isAir() || item.getAmount() <= 0;
+    if (item == null || item.getAmount() <= 0) return true;
+    Material type = item.getType();
+    return type == Material.AIR ||
+      type == Material.CAVE_AIR ||
+      type == Material.VOID_AIR;
   }
 
   static boolean isInvalidShiftPlacement(

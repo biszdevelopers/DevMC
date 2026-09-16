@@ -35,8 +35,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Silverfish;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.plugin.Plugin;
-import org.spigotmc.event.entity.EntityDismountEvent;
 
 public class SitCommand extends DevCommand implements Listener {
 

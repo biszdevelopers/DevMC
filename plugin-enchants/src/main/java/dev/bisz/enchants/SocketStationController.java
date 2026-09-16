@@ -432,7 +432,7 @@ final class SocketStationController implements Listener {
     if (name.startsWith("NETHERITE_")) return Material.NETHERITE_INGOT;
     if (name.startsWith("LEATHER_")) return Material.LEATHER;
     if (name.startsWith("CHAINMAIL_")) return Material.IRON_INGOT;
-    if (name.equals("TURTLE_HELMET")) return Material.SCUTE;
+    if (name.equals("TURTLE_HELMET")) return Material.TURTLE_SCUTE;
     return null;
   }
 

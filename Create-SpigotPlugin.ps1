@@ -75,17 +75,17 @@ $pomContent = @"
   <artifactId>$artifact_id</artifactId>
   <version>$plugin_version</version>
   <name>$plugin_name</name>
-  <description>Stub Spigot plugin.</description>
+  <description>Stub Paper plugin.</description>
 
   <properties>
-    <maven.compiler.release>17</maven.compiler.release>
+    <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
   <repositories>
     <repository>
-      <id>spigot-repo</id>
-      <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+      <id>papermc</id>
+      <url>https://repo.papermc.io/repository/maven-public/</url>
     </repository>
   </repositories>
 
@@ -104,9 +104,9 @@ $pomContent = @"
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.spigotmc</groupId>
-      <artifactId>spigot-api</artifactId>
-      <version>1.20.1-R0.1-SNAPSHOT</version>
+      <groupId>io.papermc.paper</groupId>
+      <artifactId>paper-api</artifactId>
+      <version>26.2.build.124-stable</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>
@@ -131,7 +131,7 @@ $pomContent = @"
           <execution>
             <goals><goal>enforce</goal></goals>
             <configuration>
-              <rules><requireJavaVersion><version>[17,)</version></requireJavaVersion></rules>
+              <rules><requireJavaVersion><version>[25,)</version></requireJavaVersion></rules>
             </configuration>
           </execution>
         </executions>
@@ -147,7 +147,7 @@ $pluginYmlContent = @"
 name: "$plugin_name"
 version: "$plugin_version"
 main: $main_class
-api-version: '1.20'
+api-version: '26.2'
 authors: ["$plugin_owner"]
 depend: [Bundler, Currency]
 "@
@@ -176,12 +176,12 @@ Set-Content -Path (Join-Path $output_dir ".gitignore") -Value $gitIgnoreContent 
 $readmeContent = @"
 # $plugin_name
 
-Minimal Spigot plugin stub. It currently provides no features.
+Minimal Paper plugin stub. It currently provides no features.
 
 ## Requirements
 
-- Java 17 or newer
-- Spigot API 1.20.1
+- Java 25 or newer
+- Paper API 26.2
 - Bundler 2.0.0-SNAPSHOT
 
 ## Build

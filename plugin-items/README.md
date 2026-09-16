@@ -1,6 +1,6 @@
 # Items
 
-`Items` is the registry-driven successor to ItemLib. It requires Bundler and targets Java 17 / Spigot-compatible 1.20.1 servers.
+`Items` is the registry-driven successor to ItemLib. It requires Bundler and targets Java 25 / Paper-compatible 26.2 servers, including Youer 26.2.
 
 ## Item definitions
 

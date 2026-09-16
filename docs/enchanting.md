@@ -10,14 +10,14 @@ sockets determined by the material it is made from. Enchanting tables, anvils,
 and grindstones add, modify, or remove sockets.
 
 The system ships as `plugin-enchants` inside the DevMC plugin suite and runs on
-**Spigot 1.20.1** with the shared **Bundler** and **Items** plugins. It is a
-port of the standalone Paper `TrueMC` plugin; content that only exists on 1.21+
-(mace, spears, copper gear, Density, Breach, Wind Burst, Lunge) is retained as
-forward-compatible configuration that no-ops on 1.20.1.
+**Paper/Youer 26.2** with the shared **Bundler** and **Items** plugins. It is a
+port of the standalone Paper `TrueMC` plugin; current Minecraft content such as
+maces, spears, copper gear, Density, Breach, Wind Burst, and Lunge is retained
+in the configuration.
 
 ## Platform and build
 
-- Java 17, Spigot API 1.20.1, Maven.
+- Java 25, Paper API 26.2, Maven.
 - Depends on `Bundler` (locales, menus, JSON profiles) and `Items` (item and
   enchantment registries, rendering, anvil merge).
 - Build the whole suite from the repository root: `mvn clean package`. Reactor
@@ -129,7 +129,7 @@ gold 25. Bow, crossbow, trident, fishing rod, and mace have hand-tuned costs
   - **Inflame** — melee + arrow ignition (was Fire Aspect, Flame).
   - **Knockback** — melee knockback + arrow knockback (was Knockback, Punch).
   - **Acrobatics** — mace smash launch + spear reach (was Wind Burst, Lunge).
-    Forward-compatible configuration; inert on 1.20.1.
+    Backed by the corresponding 26.2 item and enchantment APIs.
   - **Nimble** — melee attack speed (+0.25/level), trident throw speed
     (+10%/level), and bows become a Shortbow that fires instantly on left click
     (was Quick Charge). Crossbows keep vanilla Quick Charge.
@@ -251,7 +251,6 @@ A localized "How it works" book sits next to the close button in both menus.
 
 - Cost values are configurable in `costs.json`; defaults are listed above.
 - Wooden items currently have no sockets — a transitional tier.
-- Spears, the mace, and copper gear are forward-compatible config; they require
-  a 1.21+ server to exist.
+- Spears, the mace, and copper gear are available on the 26.2 target.
 - Nimble accelerates melee attack speed and trident throws, and turns bows into
   a Shortbow; crossbow loading still uses vanilla Quick Charge only.

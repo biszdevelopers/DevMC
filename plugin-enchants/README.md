@@ -1,7 +1,7 @@
 # Enchants
 
 trueMC's custom enchanting, socket, XP, and fishing system, integrated with the
-DevMC **Bundler** and **Items** plugins on Spigot 1.20.1.
+DevMC **Bundler** and **Items** plugins on Paper/Youer 26.2.
 
 Socket layouts and the enchantment catalog are hardcoded Java tables; costs,
 fishing loot, and display/XP settings are JSON-backed through Bundler's

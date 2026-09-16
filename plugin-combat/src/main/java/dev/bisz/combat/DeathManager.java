@@ -772,7 +772,7 @@ public final class DeathManager implements Listener, CombatService {
     if (smoke && h != null && h.entity() != null) h
       .entity()
       .getWorld()
-      .spawnParticle(Particle.SMOKE_NORMAL, h.entity().getLocation(), 30);
+      .spawnParticle(Particle.SMOKE, h.entity().getLocation(), 30);
     npcs.destroy("combat:corpse/" + c.id);
   }
 

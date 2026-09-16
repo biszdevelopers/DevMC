@@ -184,7 +184,7 @@ final class EnchantmentEffectsListener implements Listener {
     Player player, EquipmentSlot hand, ItemStack item, RandomGenerator random
   ) {
     if (player.getGameMode() == GameMode.CREATIVE) return;
-    int unbreaking = Math.max(0, item.getEnchantmentLevel(Enchantment.DURABILITY));
+    int unbreaking = Math.max(0, item.getEnchantmentLevel(Enchantment.UNBREAKING));
     if (!consumesDurability(unbreaking, random)) return;
     PlayerItemDamageEvent damageEvent = new PlayerItemDamageEvent(player, item, 1);
     plugin.getServer().getPluginManager().callEvent(damageEvent);
@@ -461,7 +461,7 @@ final class EnchantmentEffectsListener implements Listener {
 
   /** Copies both vanilla and custom potion payloads from tipped ammunition. */
   static void applyTippedArrowEffects(Arrow arrow, PotionMeta potion) {
-    arrow.setBasePotionData(potion.getBasePotionData());
+    arrow.setBasePotionType(potion.getBasePotionType());
     potion.getCustomEffects().forEach(effect -> arrow.addCustomEffect(effect, true));
     if (potion.hasColor()) arrow.setColor(potion.getColor());
   }
@@ -537,7 +537,7 @@ final class EnchantmentEffectsListener implements Listener {
 
   @SuppressWarnings("deprecation")
   private void updateNimble(Player player) {
-    AttributeInstance attribute = player.getAttribute(Attribute.GENERIC_ATTACK_SPEED);
+    AttributeInstance attribute = player.getAttribute(Attribute.ATTACK_SPEED);
     if (attribute == null) return;
     int level = level(player.getInventory().getItemInMainHand(), "nimble");
     AttributeModifier current = attribute.getModifiers().stream()
@@ -567,7 +567,7 @@ final class EnchantmentEffectsListener implements Listener {
     shortbowCooldowns.remove(player.getUniqueId());
   }
   @SuppressWarnings("deprecation") private void removeNimble(Player player) {
-    AttributeInstance attribute = player.getAttribute(Attribute.GENERIC_ATTACK_SPEED);
+    AttributeInstance attribute = player.getAttribute(Attribute.ATTACK_SPEED);
     if (attribute != null) attribute.getModifiers().stream().filter(modifier -> modifier.getUniqueId().equals(NIMBLE_MODIFIER)).findFirst().ifPresent(attribute::removeModifier);
   }
   private static boolean survival(Player player) { return player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE; }

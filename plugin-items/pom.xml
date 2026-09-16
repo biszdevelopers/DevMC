@@ -10,17 +10,17 @@
   <name>Items</name><description
   >Registry-driven custom and vanilla item support.</description>
   <properties><maven.compiler.release
-    >17</maven.compiler.release><project.build.sourceEncoding
+    >25</maven.compiler.release><project.build.sourceEncoding
     >UTF-8</project.build.sourceEncoding><junit.version
     >5.11.4</junit.version></properties>
-  <repositories><repository><id>spigot-repo</id><url
-      >https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url></repository></repositories>
+  <repositories><repository><id>papermc</id><url
+      >https://repo.papermc.io/repository/maven-public/</url></repository></repositories>
   <dependencies>
     <dependency><groupId>dev.bisz</groupId><artifactId
       >plugin-bundler</artifactId><version>2.0.0-SNAPSHOT</version><scope
       >provided</scope></dependency>
-    <dependency><groupId>org.spigotmc</groupId><artifactId
-      >spigot-api</artifactId><version>1.20.1-R0.1-SNAPSHOT</version><scope
+    <dependency><groupId>io.papermc.paper</groupId><artifactId
+      >paper-api</artifactId><version>26.2.build.124-stable</version><scope
       >provided</scope></dependency>
     <dependency><groupId>org.jetbrains</groupId><artifactId
       >annotations</artifactId><version>24.1.0</version><scope
@@ -48,6 +48,6 @@
         >maven-enforcer-plugin</artifactId><version>3.5.0</version><executions
         ><execution><goals><goal>enforce</goal></goals><configuration><rules
               ><requireJavaVersion><version
-                  >[17,)</version></requireJavaVersion></rules></configuration></execution></executions></plugin>
+                  >[25,)</version></requireJavaVersion></rules></configuration></execution></executions></plugin>
   </plugins></build>
 </project>

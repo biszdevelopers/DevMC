@@ -1,6 +1,6 @@
 # Bundler
 
-Bundler is a Java 17, Mohist/Spigot 1.20.1 shared-services plugin. Dependent plugins use its concrete classes directly.
+Bundler is a Java 25, Paper/Youer 26.2 shared-services plugin. Dependent plugins use its concrete classes directly.
 
 ## Build
 
@@ -10,7 +10,7 @@ Player profiles use the legacy `players.json` structure and moderation uses `ban
 
 The legacy chat/string helper has been migrated as `dev.bisz.chat.ChatUtils`. It provides system and broadcast message prefixes, clickable/hoverable `TextComponent` helpers, color-aware wrapping, and the retained basic formatting utilities.
 
-Editable server translations and the Minecraft 1.20.1 Mojang mappings live in `D:/ServerData/lang`. Players use `/locale` (or `/lang`) to open the flag-head language selector, or `/locale <code>` to change directly. Administrators can reload edited files with `/locale reload`.
+Editable server translations and the Minecraft 26.2 Mojang language mappings live in `D:/ServerData/lang`. Players use `/locale` (or `/lang`) to open the flag-head language selector, or `/locale <code>` to change directly. Administrators can reload edited files with `/locale reload`.
 
 The concrete menu runtime is available from `BundlerPlugin.instance().menuManager()`.
 Use `SinglePageMenuTemplate`, list-backed `PagedMenuTemplate<T>`, or provider-backed

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
@@ -64,11 +65,11 @@ public final class ItemRegistry {
     }
     HashSet<ItemId> registered = new HashSet<>();
     for (Material material : Material.values()) {
-      if (
-        !material.isItem() ||
-        material.isAir() ||
-        material.name().startsWith("LEGACY_")
-      ) continue;
+      boolean air = material == Material.AIR ||
+        material == Material.CAVE_AIR ||
+        material == Material.VOID_AIR;
+      if (air || material.name().startsWith("LEGACY_")) continue;
+      if (Bukkit.getServer() != null && !material.isItem()) continue;
       ItemId id = ItemId.of("minecraft", material.getKey().getKey());
       if (!registered.add(id)) continue; // Hybrid servers may expose aliases with one Bukkit key.
       VanillaItem item = new VanillaItem(material);

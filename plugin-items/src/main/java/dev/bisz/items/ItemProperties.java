@@ -12,6 +12,7 @@ import dev.bisz.items.Quality;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 
 public final class ItemProperties {
@@ -97,12 +98,19 @@ public final class ItemProperties {
 
     private Builder(Material material) {
       this.material = Objects.requireNonNull(material, "material");
-      if (!material.isItem() || material.isAir()) {
+      boolean air = material == Material.AIR ||
+        material == Material.CAVE_AIR ||
+        material == Material.VOID_AIR;
+      if (air || (Bukkit.getServer() != null && !material.isItem())) {
         throw new IllegalArgumentException(
           "Base material must be a non-air item"
         );
       }
-      this.maximumStackSize = material.getMaxStackSize();
+      // Paper 26.2 resolves item properties through the live server registry.
+      // Pure unit tests have no server; callers may still override this value.
+      this.maximumStackSize = Bukkit.getServer() == null
+        ? 64
+        : material.getMaxStackSize();
     }
 
     public Builder maximumStackSize(int value) {

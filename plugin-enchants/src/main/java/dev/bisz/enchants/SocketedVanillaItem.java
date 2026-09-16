@@ -349,35 +349,19 @@ public class SocketedVanillaItem extends OverrideDamageableVanillaItem implement
   }
   static NamespacedKey slotKey() { return SLOT_KEY; }
   static NamespacedKey categoryKey() { return CATEGORY_KEY; }
-  static boolean supports(Material material) { return material.isItem() && !SocketLayouts.forMaterial(material).isEmpty(); }
-
-  /**
-   * Custom enchantments live in ItemLib's PDC payload, so the item would not
-   * otherwise show the vanilla enchantment glint. A hidden marker enchantment
-   * supplies the glint and is hidden by HIDE_ENCHANTS. Luck of the Sea is a
-   * genuine fishing-rod enchantment, so rods use Protection instead and any
-   * stray Luck of the Sea on a rod is stripped.
-   */
-  private static final Enchantment GLINT_MARKER = Enchantment.LUCK;
-  private static final Enchantment FISHING_ROD_GLINT_MARKER = Enchantment.PROTECTION_ENVIRONMENTAL;
+  static boolean supports(Material material) { return !SocketLayouts.forMaterial(material).isEmpty(); }
 
   private static void applyGlint(DevItemStack stack, boolean glint) {
     ItemMeta meta = stack.bukkitStack().getItemMeta();
     if (meta == null) return;
     boolean rod = stack.bukkitStack().getType() == Material.FISHING_ROD;
-    boolean changed = false;
-    if (rod && meta.hasEnchant(GLINT_MARKER)) {
-      meta.removeEnchant(GLINT_MARKER);
-      changed = true;
-    }
-    Enchantment marker = rod ? FISHING_ROD_GLINT_MARKER : GLINT_MARKER;
-    boolean present = meta.hasEnchant(marker);
-    if (glint != present) {
-      if (glint) meta.addEnchant(marker, 1, true);
-      else meta.removeEnchant(marker);
-      changed = true;
-    }
-    if (changed) stack.bukkitStack().setItemMeta(meta);
+    // Remove marker enchantments written by the pre-26.2 workaround.
+    Enchantment legacyMarker = rod
+      ? Enchantment.PROTECTION
+      : Enchantment.LUCK_OF_THE_SEA;
+    meta.removeEnchant(legacyMarker);
+    meta.setEnchantmentGlintOverride(glint ? Boolean.TRUE : null);
+    stack.bukkitStack().setItemMeta(meta);
   }
 
   /** Removes the enchantment assigned to one socket and reconciles totals. */
