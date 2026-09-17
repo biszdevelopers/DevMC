@@ -1,0 +1,17 @@
+name: "city"
+version: "26.2"
+main: dev.bisz.city.CityPlugin
+api-version: '1.20'
+authors: ["Intestide"]
+depend: [Bundler, Currency]
+softdepend: [WorldEdit]
+permissions:
+  city.admin:
+    description: Manage cities, regions, plots, monuments, and the economy.
+    default: op
+  city.use:
+    description: Use city and plot player commands.
+    default: true
+  city.vendor:
+    description: Use the system vendor.
+    default: true
