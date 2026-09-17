@@ -2,20 +2,27 @@ package dev.bisz.enchants;
 
 import org.bukkit.entity.Player;
 
-/** Player experience represented by a constant seventeen points per level. */
+/** Player experience represented by a configurable constant points per level. */
 public final class LinearExperience {
-  /** Vanilla's cost to advance from level 5 to level 6. */
-  public static final int POINTS_PER_LEVEL = 17;
+  /** trueMC's default linear cost, read from {@code xp.points-per-level}. */
+  public static final int DEFAULT_POINTS_PER_LEVEL = 20;
+
+  private static int pointsPerLevel = DEFAULT_POINTS_PER_LEVEL;
 
   private LinearExperience() {}
+
+  /** The configured XP required for each level. */
+  public static int pointsPerLevel() { return pointsPerLevel; }
+
+  static void setPointsPerLevel(int value) { pointsPerLevel = Math.max(1, value); }
 
   public static int totalPoints(Player player) {
     return totalPoints(player.getLevel(), player.getExp());
   }
 
   static int totalPoints(int level, float progress) {
-    long points = (long) Math.max(0, level) * POINTS_PER_LEVEL
-      + Math.round(Math.max(0F, Math.min(1F, progress)) * POINTS_PER_LEVEL);
+    long points = (long) Math.max(0, level) * pointsPerLevel
+      + Math.round(Math.max(0F, Math.min(1F, progress)) * pointsPerLevel);
     return (int) Math.min(Integer.MAX_VALUE, points);
   }
 
@@ -39,13 +46,13 @@ public final class LinearExperience {
 
   public static void removeLevels(Player player, int levels) {
     if (levels <= 0) return;
-    addPoints(player, saturatedMultiply(-levels, POINTS_PER_LEVEL));
+    addPoints(player, saturatedMultiply(-levels, pointsPerLevel));
   }
 
   public static void setTotalPoints(Player player, int points) {
     int safePoints = Math.max(0, points);
-    player.setLevel(safePoints / POINTS_PER_LEVEL);
-    player.setExp((safePoints % POINTS_PER_LEVEL) / (float) POINTS_PER_LEVEL);
+    player.setLevel(safePoints / pointsPerLevel);
+    player.setExp((safePoints % pointsPerLevel) / (float) pointsPerLevel);
     player.setTotalExperience(safePoints);
   }
 

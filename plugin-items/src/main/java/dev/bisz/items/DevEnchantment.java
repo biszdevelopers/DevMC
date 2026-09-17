@@ -53,8 +53,44 @@ public abstract class DevEnchantment {
   }
   /** Allows descriptions to omit mechanics that do not apply to a material. */
   public String displayDescription(Player viewer, EnchantmentData data, Material material) {
+    Objects.requireNonNull(data, "data");
     Objects.requireNonNull(material, "material");
+    String group = materialGroup(material);
+    if (group != null) {
+      String specific = translateOptional(viewer,
+        "enchantment." + id.namespace() + "." + id.path() + "." + group + ".description");
+      if (specific != null) return specific;
+    }
     return displayDescription(viewer, data);
+  }
+
+  /** Returns a per-item locale string, or null when no material-specific key exists. */
+  protected final String translateOptional(Player viewer, String key, Object... arguments) {
+    String marker = "\u0000missing";
+    String translated = translate(viewer, key, marker, arguments);
+    return marker.equals(translated) ? null : translated;
+  }
+
+  /** Maps an item material to its description group (bow, rod, trident, ...). */
+  public static String materialGroup(Material material) {
+    if (material == null) return null;
+    String name = material.name();
+    if (name.equals("TRIDENT")) return "trident";
+    if (name.equals("FISHING_ROD")) return "rod";
+    if (name.equals("BOW")) return "bow";
+    if (name.equals("CROSSBOW")) return "crossbow";
+    if (name.equals("MACE")) return "mace";
+    if (name.endsWith("_SPEAR")) return "spear";
+    if (name.endsWith("_SWORD")) return "sword";
+    if (name.endsWith("_AXE")) return "axe";
+    if (name.endsWith("_PICKAXE")) return "pickaxe";
+    if (name.endsWith("_SHOVEL")) return "shovel";
+    if (name.endsWith("_HOE")) return "hoe";
+    if (name.endsWith("_HELMET")) return "helmet";
+    if (name.endsWith("_CHESTPLATE")) return "chestplate";
+    if (name.endsWith("_LEGGINGS")) return "leggings";
+    if (name.endsWith("_BOOTS")) return "boots";
+    return null;
   }
   final String name(Player viewer) { return displayName(viewer); }
   final String lore(Player viewer, int level) { return displayLore(viewer, level); }

@@ -1,0 +1,16 @@
+{
+  "debug": false,
+  "display": {
+    "damage-indicators": true
+  },
+  "xp": {
+    "points-per-level": 20
+  },
+  "cost": {
+    "multiplier": 1.0,
+    "refund-percent": 80
+  },
+  "enchanting": {
+    "lapis-cost": 3
+  }
+}

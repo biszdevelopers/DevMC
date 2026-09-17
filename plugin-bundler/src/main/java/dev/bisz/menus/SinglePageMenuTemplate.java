@@ -27,14 +27,12 @@ public final class SinglePageMenuTemplate extends MenuTemplate {
     int requestedPage,
     StorageProvider storage
   ) {
-    return new RenderedMenuPage(
-      1,
-      1,
-      new LinkedHashMap<>(baseItems()),
-      storageSlots(),
-      null,
-      null
-    );
+    LinkedHashMap<Integer, MenuItem> items = new LinkedHashMap<>(baseItems());
+    storageSlots().keySet().forEach(slot -> {
+      MenuItem placeholder = storagePlaceholders().get(slot);
+      if (placeholder != null) items.put(slot, placeholder);
+    });
+    return new RenderedMenuPage(1, 1, items, storageSlots(), null, null);
   }
 
   /** Fluent single-page template builder. */

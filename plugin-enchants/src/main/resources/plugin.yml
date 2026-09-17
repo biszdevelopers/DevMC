@@ -1,6 +1,10 @@
 name: Enchants
 version: 1.0.0-SNAPSHOT
 main: dev.bisz.enchants.EnchantsPlugin
-api-version: "1.20"
+api-version: "26.2"
 authors: [BisZ]
 depend: [Bundler, Items]
+permissions:
+  enchants.admin:
+    description: Access to trueMC commands
+    default: op

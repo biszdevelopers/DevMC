@@ -17,6 +17,7 @@ import dev.bisz.players.locales.PlayerLocaleUpdateEvent;
 import dev.bisz.storage.JsonDatabase;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.IllegalFormatException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -90,7 +91,8 @@ public final class DefaultLocaleService implements LocaleService {
 
   @Override
   public String translate(String language, String key, Object... arguments) {
-    return this.lookup(DefaultLocaleService.normalize(language), key).formatted(
+    return format(
+      this.lookup(DefaultLocaleService.normalize(language), key),
       arguments
     );
   }
@@ -107,7 +109,15 @@ public final class DefaultLocaleService implements LocaleService {
     if (value.equals(key)) {
       value = this.lookup("en_us_mojang", key);
     }
-    return value.formatted(arguments);
+    return format(value, arguments);
+  }
+
+  private static String format(String value, Object... arguments) {
+    try {
+      return value.formatted(arguments);
+    } catch (IllegalFormatException malformed) {
+      return value;
+    }
   }
 
   @Override

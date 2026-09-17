@@ -3,6 +3,7 @@ package dev.bisz.combat;
 import dev.bisz.bundler.BundlerPlugin;
 import dev.bisz.chat.ChatUtils;
 import dev.bisz.combat.items.*;
+import dev.bisz.enchants.DamageIndicator;
 import dev.bisz.enchants.LinearExperience;
 import dev.bisz.items.*;
 import dev.bisz.menus.*;
@@ -98,9 +99,12 @@ public final class DeathManager implements Listener, CombatService {
       p.getHealth() + p.getAbsorptionAmount() > event.getFinalDamage()
     ) return;
     if (totem(p)) return;
-    if (enter(p, event.getCause().name(), killer(event))) event.setCancelled(
-      true
-    );
+    if (enter(p, event.getCause().name(), killer(event))) {
+      // The custom death cancels the killing blow, so the lethal damage
+      // indicator must be shown here instead of on the damage event.
+      if (playerAttributed(event)) DamageIndicator.show(plugin, p, event.getFinalDamage());
+      event.setCancelled(true);
+    }
   }
 
   private boolean enter(Player p, String cause, String killer) {
@@ -768,7 +772,7 @@ public final class DeathManager implements Listener, CombatService {
     if (smoke && h != null && h.entity() != null) h
       .entity()
       .getWorld()
-      .spawnParticle(Particle.SMOKE_NORMAL, h.entity().getLocation(), 30);
+      .spawnParticle(Particle.SMOKE, h.entity().getLocation(), 30);
     npcs.destroy("combat:corpse/" + c.id);
   }
 
@@ -872,6 +876,13 @@ public final class DeathManager implements Listener, CombatService {
       return p == null ? by.getDamager().getName() : p.getName();
     }
     return "none";
+  }
+
+  private static boolean playerAttributed(EntityDamageEvent e) {
+    if (!(e instanceof EntityDamageByEntityEvent by)) return false;
+    return by.getDamager() instanceof Player
+      || (by.getDamager() instanceof Projectile projectile &&
+        projectile.getShooter() instanceof Player);
   }
 
   private static boolean totem(Player p) {

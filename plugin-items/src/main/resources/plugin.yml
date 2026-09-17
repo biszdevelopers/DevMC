@@ -1,7 +1,7 @@
 name: Items
 version: 2.0.0-SNAPSHOT
 main: dev.bisz.items.ItemsPlugin
-api-version: "1.20"
+api-version: "26.2"
 authors: [BisZ]
 depend: [Bundler]
 permissions:

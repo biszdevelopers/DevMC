@@ -17,7 +17,14 @@ public final class LethalityEnchantment extends EnchantsEnchantment {
       "Increases melee damage by %s.", formatHalf(.5D + data.level() * .5D));
   }
   @Override protected double modifyOutgoingDamage(EnchantmentDamageContext context, double damage) {
-    return context.projectile() ? damage * (1.25D + context.level() * .25D) : damage + .5D + context.level() * .5D;
+    double result = context.projectile()
+      ? damage * (1.25D + context.level() * .25D)
+      : damage + .5D + context.level() * .5D;
+    // Gold is a magical glass cannon: its damage enchantments are amplified.
+    if (context.stack().bukkitStack().getType().name().startsWith("GOLDEN_")) {
+      result += context.level() + 1D;
+    }
+    return result;
   }
   private static String formatHalf(double value) {
     return value == Math.rint(value) ? Integer.toString((int) value) : String.format(Locale.ROOT, "%.1f", value);

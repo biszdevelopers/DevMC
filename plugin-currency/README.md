@@ -1,6 +1,6 @@
 # Currency
 
-Spigot currency plugin. Its official currency is **nits**.
+Paper currency plugin. Its official currency is **nits**.
 
 ## Commands
 
@@ -8,8 +8,8 @@ Spigot currency plugin. Its official currency is **nits**.
 
 ## Requirements
 
-- Java 17 or newer
-- Spigot API 1.20.1
+- Java 25 or newer
+- Paper API 26.2
 - Bundler 2.0.0-SNAPSHOT
 
 ## Build

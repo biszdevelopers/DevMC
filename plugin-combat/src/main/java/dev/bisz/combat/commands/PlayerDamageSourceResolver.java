@@ -80,9 +80,9 @@ final class PlayerDamageSourceResolver {
       }
     }
 
-    // Forge's production runtime uses SRG/obfuscated method names. In
-    // Minecraft 1.20.1, Projectile#getOwner() is m_19749_(). The legacy
-    // name keeps the fallback useful on older hybrid server mappings.
+    // Hybrid runtimes can expose SRG/obfuscated method names. Keep the
+    // historical Projectile#getOwner() mapping as a compatibility fallback;
+    // readable 26.2 accessors are attempted above first.
     for (String accessor : NATIVE_OWNER_ACCESSORS) {
       Player owner = resolveValue(
         invokeNoArg(value, accessor),

@@ -3,6 +3,7 @@ package dev.bisz.items;
 import java.text.NumberFormat;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -21,7 +22,11 @@ public abstract class OverrideDamageableVanillaItem extends OverrideVanillaItem 
   /** Only shared non-damageable specializations (such as socket books) may opt out. */
   protected OverrideDamageableVanillaItem(Material material, ItemProperties properties, boolean permitNonDamageable) {
     super(material, properties);
-    if (!permitNonDamageable && material.getMaxDurability() <= 0) throw new IllegalArgumentException("Damageable override requires durability: " + material);
+    if (
+      !permitNonDamageable &&
+      Bukkit.getServer() != null &&
+      material.getMaxDurability() <= 0
+    ) throw new IllegalArgumentException("Damageable override requires durability: " + material);
   }
 
   public final boolean broken(DevItemStack stack) {

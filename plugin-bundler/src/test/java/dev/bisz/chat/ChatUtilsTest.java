@@ -28,6 +28,15 @@ class ChatUtilsTest {
   }
 
   @Test
+  void rendersCountedItemsInTheUniversalFormat() {
+    assertEquals("§7x1 §fDiamond", ChatUtils.countedItem(1, "§fDiamond"));
+    assertEquals(
+      "§7x64 §bEnchanted Book",
+      ChatUtils.countedItem(64, "§bEnchanted Book")
+    );
+  }
+
+  @Test
   void retainsLegacyListAndTimeHelpersWithoutTheOldObjectArrayBug() {
     assertEquals(List.of("alpha", "2"), ChatUtils.fromObjects("ALPHA", 2));
     assertEquals(

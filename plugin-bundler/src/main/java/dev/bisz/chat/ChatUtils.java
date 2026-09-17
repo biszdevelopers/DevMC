@@ -364,8 +364,17 @@ public final class ChatUtils {
     return result.toString();
   }
 
-  public static String quantify(long amount, String content) {
-    return "§7×" + amount + " " + Objects.requireNonNull(content, "content");
+  /**
+   * Renders one counted item in the universal {@code §7x<amount> <name>} format.
+   *
+   * <p>The supplied display name must already carry the item's quality color
+   * and any overridden name; this helper only supplies the count.</p>
+   */
+  public static String countedItem(long amount, String displayName) {
+    return "§7x" + amount + " " + Objects.requireNonNull(
+      displayName,
+      "displayName"
+    );
   }
 
   public static String commaNumber(long amount) {

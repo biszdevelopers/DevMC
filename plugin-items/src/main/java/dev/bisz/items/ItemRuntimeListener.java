@@ -515,7 +515,13 @@ final class ItemRuntimeListener implements Listener {
     }
   }
 
-  private static boolean empty(ItemStack item) { return item == null || item.getType().isAir(); }
+  private static boolean empty(ItemStack item) {
+    if (item == null || item.getAmount() <= 0) return true;
+    Material type = item.getType();
+    return type == Material.AIR ||
+      type == Material.CAVE_AIR ||
+      type == Material.VOID_AIR;
+  }
 
   private record HandSnapshot(int heldSlot, ItemStack mainHand, ItemStack offHand) {}
 

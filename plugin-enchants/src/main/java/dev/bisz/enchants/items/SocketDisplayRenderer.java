@@ -12,14 +12,14 @@ public final class SocketDisplayRenderer {
   private SocketDisplayRenderer() {}
 
 
-  public static String empty(String color, String icon, Player viewer) {
-
-    return Locale.get(viewer, "enchants.socket.empty", color, icon, color);
+  /** Empty sockets render neutral gray regardless of their typed family. */
+  public static String empty(String icon, Player viewer) {
+    return Locale.get(viewer, "enchants.socket.empty", "§7", icon, "§7");
   }
 
   /** Menu label: typed icons/brackets are neutral; Universal remains gray while empty. */
   public static String selectableEmpty(String icon, boolean universal, Player viewer) {
-    return empty("§7", icon, viewer);
+    return empty(icon, viewer);
   }
 
   public static String filled(String color, String icon, Map.Entry<DevEnchantment, EnchantmentData> entry, Player viewer) {

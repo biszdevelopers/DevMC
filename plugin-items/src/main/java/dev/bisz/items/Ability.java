@@ -59,7 +59,7 @@ public final class Ability {
       "%s §8- §b§lREADY", quality.colorCode() + displayName(viewer));
   }
   /** Joins simultaneously visible ability cooldowns with the standard dark-gray divider. */
-  public static String joinActionBars(List<String> entries) { return String.join(" §8| ", entries); }
+  public static String joinActionBars(List<String> entries) { return String.join("§8|", entries); }
 
   public static final class Builder {
     private final String localeRoot;
