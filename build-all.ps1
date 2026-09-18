@@ -9,7 +9,7 @@
 #   .\build-all.ps1                      # build + tests, deploy the runnable set
 #   .\build-all.ps1 -SkipTests           # faster: build without running tests
 #   .\build-all.ps1 -Clean               # mvn clean install each plugin
-#   .\build-all.ps1 -Only plugin-city    # build just one plugin
+#   .\build-all.ps1 -Only plugin-world   # build just one plugin
 #   .\build-all.ps1 -Exclude @()         # include combat and SMP
 #   .\build-all.ps1 -PluginsDir "D:\server\plugins"
 [CmdletBinding()]
@@ -34,7 +34,7 @@ $order = @(
   'plugin-enchants',
   'plugin-combat',
   'plugin-smp',
-  'plugin-city'
+  'plugin-world'
 )
 
 if (-not (Test-Path -LiteralPath $PluginsDir)) {
@@ -44,6 +44,7 @@ if (-not (Test-Path -LiteralPath $PluginsDir)) {
 
 $deployed = @()
 $failed = @()
+$locked = @()
 
 foreach ($plugin in $order) {
   if ($Only -and ($Only -notcontains $plugin)) { continue }
@@ -91,19 +92,31 @@ foreach ($plugin in $order) {
   }
 
   # Remove previous builds of this plugin so only one version is loaded.
-  Get-ChildItem -LiteralPath $PluginsDir -Filter "$plugin-*.jar" -ErrorAction SilentlyContinue |
-    Remove-Item -Force
-
-  Copy-Item -LiteralPath $jar.FullName -Destination (Join-Path $PluginsDir $jar.Name) -Force
-  Write-Host "Deployed $($jar.Name)" -ForegroundColor Green
-  $deployed += $jar.Name
+  $destination = Join-Path $PluginsDir $jar.Name
+  try {
+    Get-ChildItem -LiteralPath $PluginsDir -Filter "$plugin-*.jar" -ErrorAction SilentlyContinue |
+      Remove-Item -Force -ErrorAction Stop
+    Copy-Item -LiteralPath $jar.FullName -Destination $destination -Force -ErrorAction Stop
+    Write-Host "Deployed $($jar.Name)" -ForegroundColor Green
+    $deployed += $jar.Name
+  } catch {
+    Write-Host "LOCKED $($jar.Name) (server running?)" -ForegroundColor Yellow
+    $locked += $jar.Name
+  }
 }
 
 Write-Host ''
 Write-Host '=== Summary ===' -ForegroundColor Cyan
-foreach ($name in $deployed) { Write-Host "  OK   $name" -ForegroundColor Green }
-foreach ($name in $failed) { Write-Host "  FAIL $name" -ForegroundColor Red }
+foreach ($name in $deployed) { Write-Host "  OK     $name" -ForegroundColor Green }
+foreach ($name in $locked) { Write-Host "  LOCKED $name" -ForegroundColor Yellow }
+foreach ($name in $failed) { Write-Host "  FAIL   $name" -ForegroundColor Red }
 
+if ($locked.Count -gt 0) {
+  Write-Host ''
+  Write-Host 'Some jars could not be replaced because they are in use.' -ForegroundColor Yellow
+  Write-Host 'Stop the server and re-run this script to deploy them.' -ForegroundColor Yellow
+  exit 1
+}
 if ($failed.Count -gt 0) {
   exit 1
 }

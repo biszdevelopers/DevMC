@@ -1,5 +1,5 @@
 storage:
-  directory: "D:/ServerData"
+  directory: "ServerData"
 modules:
   profiles: true
   ranks: true
@@ -9,6 +9,6 @@ modules:
   menus: true
   tablist: false
   server-health: false
-  npc: true
+  npc: false
 authentication:
   timeout-millis: 5000

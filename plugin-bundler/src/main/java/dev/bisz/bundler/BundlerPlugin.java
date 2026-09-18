@@ -157,7 +157,7 @@ public final class BundlerPlugin extends JavaPlugin {
     try {
       String configuredDirectory = this.getConfig().getString(
         "storage.directory",
-        "D:/ServerData"
+        "ServerData"
       );
       if (configuredDirectory == null || configuredDirectory.isBlank()) {
         throw new IllegalArgumentException("storage.directory cannot be blank");

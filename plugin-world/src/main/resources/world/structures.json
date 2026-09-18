@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "structures": [
+    {
+      "id": "supply_drop",
+      "name": "Supply Drop",
+      "file": "supply_drop.schem",
+      "category": "event",
+      "type": "poi",
+      "biomes": [],
+      "loot_table": "tier2",
+      "loot_respawn_ticks": 0,
+      "rotation_y": 0,
+      "ignore_air": true,
+      "copy_entities": true,
+      "event_type": "supply_drop",
+      "persistent": false
+    },
+    {
+      "id": "ruined_outpost",
+      "name": "Ruined Outpost",
+      "file": "ruined_outpost.schem",
+      "category": "monument",
+      "type": "monument",
+      "biomes": [],
+      "loot_table": "tier3",
+      "loot_respawn_ticks": 36000,
+      "rotation_y": 0,
+      "ignore_air": false,
+      "copy_entities": true,
+      "event_type": null,
+      "persistent": true
+    }
+  ]
+}
