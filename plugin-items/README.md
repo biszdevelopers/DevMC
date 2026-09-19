@@ -11,6 +11,8 @@ public final class TestSwordItem extends CustomItem {
     public TestSwordItem() {
         super(ItemId.of("devmc", "test_sword"), ItemProperties.builder(Material.DIAMOND_SWORD)
                 .maximumStackSize(1).quality(Quality.EPIC)
+                .itemModel("devmc:item/test_sword")
+                .customModelData(7)
                 .metadata("charges", ItemDataType.INTEGER, 0).build());
     }
 }
@@ -19,6 +21,8 @@ DeferredItemRegister items = DeferredItemRegister.create(plugin, "devmc");
 RegistryObject<TestSwordItem> testSword = items.register("test_sword", TestSwordItem::new);
 items.apply(itemRegistry);
 ```
+
+`itemModel` selects a resource-pack model, for example `assets/devmc/items/item/test_sword.json` plus its textures. `customModelData(int)` is shorthand for the first float of the 26.2 `custom_model_data` component; use `customModelDataFloats`, `customModelDataFlags`, `customModelDataStrings`, and `customModelDataColors` for the full component. Both are written when a stack is created and re-applied on every render, so existing stacks pick up definition changes without a migration.
 
 Resolve an existing stack through `ItemFactory.wrap`. Custom PDC identity has precedence; unknown custom IDs intentionally resolve to `UnresolvedItem`, never to their base material. Vanilla stack definitions are generated eagerly during `ItemsPlugin.onLoad()` for every supported non-air Bukkit item; legacy materials are deliberately excluded.
 

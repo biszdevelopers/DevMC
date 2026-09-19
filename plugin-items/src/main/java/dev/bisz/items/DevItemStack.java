@@ -21,6 +21,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.components.CustomModelDataComponent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
@@ -58,6 +59,7 @@ public final class DevItemStack {
         container.set(key(UNIQUE_KEY), PersistentDataType.STRING, UUID.randomUUID().toString());
       }
     });
+    editMeta(this::applyModel);
   }
 
   public Optional<String> customName() { return read(CUSTOM_NAME_KEY, ItemDataType.STRING).map(String.class::cast); }
@@ -319,7 +321,21 @@ public final class DevItemStack {
     meta.getPersistentDataContainer().set(key(LANGUAGE_KEY), PersistentDataType.STRING, ItemTranslations.normalize(language));
     meta.getPersistentDataContainer().remove(key(LEGACY_ENCHANTMENT_SIGNATURE_KEY));
     meta.getPersistentDataContainer().set(key(RENDER_SIGNATURE_KEY), PersistentDataType.STRING, renderSignature());
+    applyModel(meta);
     bukkit.setItemMeta(meta);
+  }
+
+  /** Writes the definition's resource-pack model and custom_model_data component. */
+  private void applyModel(ItemMeta meta) {
+    ItemProperties properties = definition.properties();
+    if (properties.itemModel() != null) meta.setItemModel(properties.itemModel());
+    if (!properties.hasCustomModelData()) return;
+    CustomModelDataComponent component = meta.getCustomModelDataComponent();
+    if (!properties.customModelDataFloats().isEmpty()) component.setFloats(properties.customModelDataFloats());
+    if (!properties.customModelDataFlags().isEmpty()) component.setFlags(properties.customModelDataFlags());
+    if (!properties.customModelDataStrings().isEmpty()) component.setStrings(properties.customModelDataStrings());
+    if (!properties.customModelDataColors().isEmpty()) component.setColors(properties.customModelDataColors());
+    meta.setCustomModelDataComponent(component);
   }
 
   private Map<EnchantmentId, Integer> enchantmentLevels() {
@@ -479,6 +495,7 @@ public final class DevItemStack {
   private ItemMeta requiredMeta() { ItemMeta meta = bukkit.getItemMeta(); if (meta == null) throw new IllegalStateException("Item has no mutable metadata"); return meta; }
   private Optional<Object> read(String name, ItemDataType type) { ItemMeta meta = bukkit.getItemMeta(); return meta == null ? Optional.empty() : Optional.ofNullable(get(meta.getPersistentDataContainer(), name, type)); }
   private void edit(Consumer<PersistentDataContainer> action) { ItemMeta meta = requiredMeta(); action.accept(meta.getPersistentDataContainer()); bukkit.setItemMeta(meta); }
+  private void editMeta(Consumer<ItemMeta> action) { ItemMeta meta = requiredMeta(); action.accept(meta); bukkit.setItemMeta(meta); }
   private static NamespacedKey key(String path) { return new NamespacedKey((Plugin) ItemsPlugin.instance(), path); }
   private static void validateLevel(int level) { if (level < 1 || level > 3999) throw new IllegalArgumentException("Enchantment levels must be 1..3999"); }
   private static boolean has(PersistentDataContainer container, String path, ItemDataType type) { return switch (type) { case STRING -> container.has(key(path), PersistentDataType.STRING); case INTEGER -> container.has(key(path), PersistentDataType.INTEGER); case LONG -> container.has(key(path), PersistentDataType.LONG); case DOUBLE -> container.has(key(path), PersistentDataType.DOUBLE); case BOOLEAN -> container.has(key(path), PersistentDataType.BYTE); }; }

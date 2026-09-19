@@ -10,10 +10,13 @@ import dev.bisz.items.ItemDataType;
 import dev.bisz.items.ItemMetadata;
 import dev.bisz.items.Quality;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 
 public final class ItemProperties {
 
@@ -27,6 +30,11 @@ public final class ItemProperties {
   private final boolean inventoryTicking;
   private final boolean attackTriggering;
   private final Map<String, ItemMetadata> metadata;
+  private final NamespacedKey itemModel;
+  private final List<Float> customModelDataFloats;
+  private final List<Boolean> customModelDataFlags;
+  private final List<String> customModelDataStrings;
+  private final List<Color> customModelDataColors;
 
   private ItemProperties(Builder builder) {
     this.material = builder.material;
@@ -39,6 +47,11 @@ public final class ItemProperties {
     this.inventoryTicking = builder.inventoryTicking;
     this.attackTriggering = builder.attackTriggering;
     this.metadata = Map.copyOf(builder.metadata);
+    this.itemModel = builder.itemModel;
+    this.customModelDataFloats = List.copyOf(builder.customModelDataFloats);
+    this.customModelDataFlags = List.copyOf(builder.customModelDataFlags);
+    this.customModelDataStrings = List.copyOf(builder.customModelDataStrings);
+    this.customModelDataColors = List.copyOf(builder.customModelDataColors);
   }
 
   public static Builder builder(Material material) {
@@ -80,6 +93,34 @@ public final class ItemProperties {
     return this.metadata;
   }
 
+  /** Resource-pack item model used as this item's client-side appearance. */
+  public NamespacedKey itemModel() {
+    return this.itemModel;
+  }
+
+  public List<Float> customModelDataFloats() {
+    return this.customModelDataFloats;
+  }
+
+  public List<Boolean> customModelDataFlags() {
+    return this.customModelDataFlags;
+  }
+
+  public List<String> customModelDataStrings() {
+    return this.customModelDataStrings;
+  }
+
+  public List<Color> customModelDataColors() {
+    return this.customModelDataColors;
+  }
+
+  public boolean hasCustomModelData() {
+    return !this.customModelDataFloats.isEmpty() ||
+      !this.customModelDataFlags.isEmpty() ||
+      !this.customModelDataStrings.isEmpty() ||
+      !this.customModelDataColors.isEmpty();
+  }
+
   public static final class Builder {
 
     private final Material material;
@@ -95,6 +136,11 @@ public final class ItemProperties {
       String,
       ItemMetadata
     >();
+    private NamespacedKey itemModel;
+    private List<Float> customModelDataFloats = List.of();
+    private List<Boolean> customModelDataFlags = List.of();
+    private List<String> customModelDataStrings = List.of();
+    private List<Color> customModelDataColors = List.of();
 
     private Builder(Material material) {
       this.material = Objects.requireNonNull(material, "material");
@@ -168,6 +214,57 @@ public final class ItemProperties {
       if (this.metadata.putIfAbsent(key, entry) != null) {
         throw new IllegalArgumentException("Duplicate metadata key: " + key);
       }
+      return this;
+    }
+
+    /** Selects a resource-pack item model such as {@code devmc:item/test_sword}. */
+    public Builder itemModel(NamespacedKey value) {
+      this.itemModel = value;
+      return this;
+    }
+
+    /** Selects a resource-pack item model parsed from {@code namespace:path}. */
+    public Builder itemModel(String value) {
+      Objects.requireNonNull(value, "itemModel");
+      NamespacedKey parsed = NamespacedKey.fromString(value);
+      if (parsed == null) {
+        throw new IllegalArgumentException(
+          "itemModel must be namespace:path: " + value
+        );
+      }
+      return this.itemModel(parsed);
+    }
+
+    /** Legacy integer selector, stored as the first custom_model_data float. */
+    public Builder customModelData(int value) {
+      return this.customModelDataFloats((float) value);
+    }
+
+    public Builder customModelDataFloats(Float... values) {
+      this.customModelDataFloats = List.of(
+        Objects.requireNonNull(values, "customModelDataFloats")
+      );
+      return this;
+    }
+
+    public Builder customModelDataFlags(Boolean... values) {
+      this.customModelDataFlags = List.of(
+        Objects.requireNonNull(values, "customModelDataFlags")
+      );
+      return this;
+    }
+
+    public Builder customModelDataStrings(String... values) {
+      this.customModelDataStrings = List.of(
+        Objects.requireNonNull(values, "customModelDataStrings")
+      );
+      return this;
+    }
+
+    public Builder customModelDataColors(Color... values) {
+      this.customModelDataColors = List.of(
+        Objects.requireNonNull(values, "customModelDataColors")
+      );
       return this;
     }
 
