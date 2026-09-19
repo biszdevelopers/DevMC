@@ -24,3 +24,28 @@ development-runner/**/*.pyc
 .idea/
 .idea
 *.iml
+
+# Build artifacts
+*.jar
+*.class
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.serena/
