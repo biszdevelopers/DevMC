@@ -1,9 +1,9 @@
 package dev.bisz.world.feature;
 
 import dev.bisz.world.config.WorldSettings;
+import dev.bisz.world.structure.PoiService;
 import dev.bisz.world.wilderness.LootReseeder;
 import dev.bisz.world.wilderness.OreReseeder;
-import dev.bisz.world.wilderness.SmallStructures;
 import java.util.Objects;
 import java.util.Random;
 import org.bukkit.World;
@@ -17,7 +17,7 @@ public final class FeatureGenerator {
 
   private final WorldSettings settings;
   private final OreReseeder ores;
-  private final SmallStructures smallStructures;
+  private final PoiService pois;
   private final LootReseeder loot;
   private final PlantGenerator plants = new PlantGenerator();
   private final AnimalGenerator animals = new AnimalGenerator();
@@ -25,20 +25,25 @@ public final class FeatureGenerator {
   public FeatureGenerator(
     WorldSettings settings,
     OreReseeder ores,
-    SmallStructures smallStructures,
+    PoiService pois,
     LootReseeder loot
   ) {
     this.settings = Objects.requireNonNull(settings, "settings");
     this.ores = Objects.requireNonNull(ores, "ores");
-    this.smallStructures = Objects.requireNonNull(smallStructures, "smallStructures");
+    this.pois = Objects.requireNonNull(pois, "pois");
     this.loot = Objects.requireNonNull(loot, "loot");
   }
 
-  /** Applies every enabled feature to a chunk. */
-  public void apply(World world, int chunkX, int chunkZ, Random random) {
-    ores.reseed(world, chunkX, chunkZ, random);
-    smallStructures.reseed(world, chunkX, chunkZ, random);
-    loot.reseed(world, chunkX, chunkZ, random);
+  /**
+   * Applies every enabled feature to a chunk.
+   *
+   * @return the number of resource nodes (ore blocks, loot caches, POIs)
+   *     placed, used as the chunk's resource baseline
+   */
+  public int apply(World world, int chunkX, int chunkZ, Random random) {
+    int nodes = ores.reseed(world, chunkX, chunkZ, random);
+    nodes += pois.reseed(world, chunkX, chunkZ, random);
+    nodes += loot.reseed(world, chunkX, chunkZ, random);
     if (settings.plantsEnabled()) {
       plants.reseed(world, chunkX, chunkZ, random);
     }
@@ -51,5 +56,18 @@ public final class FeatureGenerator {
         settings.animalsPerChunk()
       );
     }
+    return nodes;
+  }
+
+  /**
+   * A rough baseline for chunks generated before resource accounting existed,
+   * so their depletion still triggers regeneration.
+   */
+  public int estimateBaseline(World world) {
+    boolean nether = world.getEnvironment() == World.Environment.NETHER;
+    int nodes = ores.estimateNodesPerChunk(nether);
+    nodes += settings.lootCachesPerChunk();
+    if (settings.structuresEnabled()) nodes += 1;
+    return Math.max(1, nodes);
   }
 }

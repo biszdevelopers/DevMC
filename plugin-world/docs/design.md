@@ -1,9 +1,8 @@
 # World Plugin — Design
 
 Status: approved. The rename to `world` and the refined generation loop are
-being implemented; deferred items are listed in section 19. The ordered
-generation pipeline itself is specified in
-[generation-loop.md](generation-loop.md).
+being implemented; deferred items are listed in section 19. Section 18 specifies
+the world generation pipeline.
 
 ## 1. Vision and pillars
 
@@ -86,29 +85,51 @@ border is rendered so players can never be surprised by a rule change.
 The wilderness supports no permanent building. Any block a player places or
 breaks is transient by definition; the terrain is scheduled to fully regenerate.
 
-### 4.1 Chunk indicators
+### 4.1 Chunk state
 
-Regeneration is tracked **per chunk** (the earlier 4×4 region grouping is
-removed). Indicators are cheap per-chunk scalars:
+Regeneration is tracked **per chunk** in `world/wilderness.json` (schema 3). One
+record per chunk holds every index:
 
-- **Resource indicator** (`0..1`) — the fraction of ore and loot nodes still
-  present. It starts at `1` after a regeneration and falls as players mine ore
-  blocks and loot containers.
-- **Visibility indicator** (`0..1`) — recent player attention. It rises while
-  players are present in or editing the chunk, and decays with a configurable
-  half-life (`regen.visibility_half_life_seconds`).
+- **Resource** (`0..1`) — the fraction of ore and loot nodes still present.
+  `extracted_nodes` counts what players have removed since the last reset; the
+  fraction is derived from it and the baseline.
+- **Due time** — when the chunk may next be reset, or `0` (unscheduled) until the
+  chunk is farmed.
+- **Presence** — the last time a non-spectator player was in the chunk.
+- **Edits** — the last change to the chunk plus a `dirty` flag. Player breaks,
+  places, and container use are recorded by `WildernessListener`; non-player
+  changes (explosions, fire, and block-moving mobs such as endermen, ravagers,
+  and withers) are recorded by the same listener's block events, with an
+  unload-time terrain sample as a backstop. Benign natural processes (leaf
+  decay, snow melt, grass spread, grazing) are ignored, and changes within a
+  short settle window after a reset are ignored so the feature pass cannot
+  re-dirty its own output.
+- **Pin** — death drops keep the chunk from resetting.
 
-Indicators are persisted in `world/wilderness.json` and updated by
+Untouched chunks are never scheduled. The state is updated by
 `WildernessListener` and the scheduler's player-presence scan.
 
 ### 4.2 Regeneration selection
 
 `RegenerationScheduler` evaluates every tracked chunk each
-`regen.evaluate_interval_seconds`. A chunk is selected when it is **idle**
-(visibility at or below `regen.visibility_threshold`) and either **depleted**
-(resource at or below `regen.resource_threshold`) or past the hard
-`regen.max-age-seconds` cap. Visibility always gates selection, so an active
-chunk is never reset out from under players.
+`regen.evaluate_interval_seconds`. The system is **mining-driven**:
+
+1. **Schedule.** A chunk is scheduled once it has been farmed: at least
+   `regen.depletion_nodes` resource nodes extracted, or player edits idle for
+   `regen.dirty_inactivity_seconds`. Its due time is
+   `now + regen.cycle_seconds + jitter`, where the jitter is deterministic per
+   chunk so chunks farmed together do not all reset together.
+2. **Reset.** A scheduled chunk resets when it is **due**, **idle** (no
+   non-spectator player within `regen.player_radius_chunks`), past
+   `regen.grace_seconds` since the last presence/edit, and **unpinned**. On reset
+   the schedule and all indexes are cleared.
+
+The baseline node count is recorded from the feature pass (ore blocks, loot
+caches, and POIs actually placed), so `resource` reflects real content. Work is
+bounded by both `regen.chunks-per-tick` and a wall-clock
+`regen.budget-millis-per-tick`, and a chunk that becomes occupied while queued is
+re-queued rather than dropped. Every schedule, queue, and reset is logged;
+`worldinfo regenstatus` reports tracked / scheduled / due / queued / next.
 
 Selected chunks are enqueued individually. Chunks belonging to a settlement or
 intersecting a monument are skipped. Chunks containing a player or holding
@@ -120,23 +141,34 @@ unrecovered death drops are **pinned** and skipped. Execution is budgeted at
 Each queued chunk is regenerated to its **barebone state** through the
 `ChunkRegenerator` SPI:
 
-- `WorldEditChunkRegenerator` (primary) — regenerates terrain from the world
-  seed, then **strips natural ores** in bulk (stone ores → stone, deepslate ores
-  → deepslate, nether ores → netherrack) so ore placement is fully controlled.
-- `NoopChunkRegenerator` (safe fallback) — logs and skips so a missing
+- Regeneration copies fresh terrain from a **scratch world** created with the
+  same seed and generator, so terrain always matches the world seed. (Paper's
+  `regenerateChunk` is stubbed out on 26.1+, WorldEdit's `regenerate` uses the
+  wrong seed, and loaded/spawn chunks cannot be unloaded, so none of those work.)
+- The copy is a **single bulk WorldEdit operation** (`ForwardExtentCopy` through
+  an `EditSession`) rather than two full per-block Bukkit walks, which was the
+  dominant regeneration cost. Scratch chunks are saved on unload, so later
+  cycles load them from disk instead of regenerating them. Without WorldEdit the
+  fallback uses a native `Chunk#getChunkSnapshot` capture and per-block restore.
+- `WorldEditChunkRegenerator` (primary) can **strip natural ores** in bulk
+  (stone ores → stone, deepslate ores → deepslate, nether ores → netherrack),
+  but this only runs when `regen.vanilla_ores` is set: the managed generators
+  place no decorations, so the scratch terrain contains no ores to strip.
+- `NoopChunkRegenerator` (safe fallback) skips the strip so a missing
   dependency never corrupts a chunk.
 
-WorldEdit is declared as a soft dependency (`softdepend: [WorldEdit]`).
+WorldEdit is declared as a soft dependency (`softdepend: [WorldEdit]`); without
+it regeneration still works, but ore stripping and POI pasting are disabled.
 
 ### 4.4 Feature reseed
 
 After the barebone terrain is in place, features are re-applied:
 
-- **Ore veins:** `OreReseeder` places weighted, depth-aware veins with
-  vanilla-like vein sizes and height distributions, rebalanced so that vein
-  mining is nerfed and caving is buffed: overall ore volume is increased and
-  placement is biased toward air-exposed positions, while fully buried veins are
-  reduced. Veins only replace stone, deepslate, or netherrack.
+- **Ore veins:** `OreReseeder` uses the vanilla `minecraft:ore` values and shape
+  (slim capsule with a sine profile), including each ore's air-exposure discard,
+  so distribution matches vanilla. Tweaks: `ore.count-multiplier` (slightly more
+  overall) and `ore.exposure-weight` (a mild bias against fully buried veins).
+  Veins only replace stone, deepslate, or netherrack.
 - **Plants:** biome-appropriate vegetation is regenerated on the surface.
 - **Animals:** passive animals are spawned on suitable surface terrain.
 - **Loot caches:** `LootReseeder` hides weighted caches from `world/loot.json`.
@@ -152,22 +184,28 @@ from reset until the drops are recovered or `regen.drop-pin-seconds` elapses.
 This prevents a reset from silently deleting a player's gear while they are
 running back.
 
-### 4.6 Two-layer regeneration
+### 4.6 Dirty regeneration and the resource cycle
 
-Mining is restored in two layers so the world feels solid immediately while
-resources still cycle over time:
+Changes are regenerated promptly while long-term farming still cycles on the
+chunk schedule:
 
-1. **Quick layer** — basic blocks (stone, deepslate, dirt, sand, gravel, ...)
-   are restored after `regen.simple_respawn_seconds`, as long as no player is
-   within `regen.simple_player_radius` and the spot is still empty. Blocks a
-   player placed themselves are remembered and never resurrected.
-2. **Slow layer** — barebone regeneration plus ore veins, plants, animals,
-   loot, and POIs on the chunk schedule (sections 4.1-4.4).
+1. **Dirty regeneration** — when a changed wilderness chunk has no non-spectator
+   player within `regen.player_radius_chunks` and `regen.fast_regen_seconds` has
+   elapsed since the change, the chunk is **fully regenerated**: the barebone
+   terrain is overwritten from the scratch world in one bulk WorldEdit copy, and
+   ores, plants, animals, loot, and POIs are re-seeded. This is the same pass as
+   the scheduled reset, just triggered by a change instead of the resource
+   cycle.
+2. **Resource cycle** — a chunk that was farmed (enough nodes extracted) is
+   additionally scheduled for a reset about `regen.cycle_seconds` later, with a
+   deterministic per-chunk jitter, so heavily farmed areas keep cycling even if
+   they are not re-dirtied.
 
 ## 5. Monuments and POIs
 
-Structures are classified as **monuments** or **POIs**. The classification
-drives placement, persistence, and regeneration behaviour.
+The wilderness has two kinds of authored content: **monuments**, which are large
+landmarks defined manually by administrators, and **POIs**, which are small,
+destructible, regenerable points of interest stored as schematics.
 
 ### 5.1 Monuments
 
@@ -175,16 +213,13 @@ Monuments are the wilderness's content backbone: persistent, fixed landmarks
 that players learn, race, and fight over. They are **exempt from terrain
 reset**; only their loot refreshes.
 
-- Each monument spawns **once**, and monuments are **spaced out** by a
-  configurable minimum distance.
-- Before pasting, a configurable **pad** is cleared/flattened around the
-  footprint so the monument is never covered up and never distorts the terrain
-  around it.
+- Monuments are **defined manually by administrators**:
+  `/worldadmin monument add <id> [tier] [table]` records the admin's WorldEdit
+  selection (or a radius around them when there is no selection).
 - A monument is registered in `world/monuments.json` with its bounds, tier,
   loot table, respawn timer, hazard, and optional keycard requirement.
-- The roster is built from **custom structures** loaded and pasted through the
-  structure system (section 6), not from vanilla world generation. The tier
-  table below is the intended difficulty ladder:
+- Loot chests respawn on a timer. Higher tiers may require a keycard bought in
+  the settlement.
 
 | Tier | Loot character |
 |---|---|
@@ -193,94 +228,54 @@ reset**; only their loot refreshes.
 | 3 | Rare loot, heavy contraband |
 | 4 | Premium loot, high hazard |
 
-Loot chests respawn on a timer. A monument may periodically **awaken** for a
-window, broadcasting its location and boosting loot, to concentrate conflict.
-Higher tiers may require a keycard bought in the settlement.
-
 ### 5.2 POIs
 
 POIs (points of interest) are the repeatable wilderness content, such as
-dungeons.
+dungeons. They are the **only** structures the plugin stores.
 
 - A POI may spawn **many times**, up to a global **cap**
   (`structures.poi_cap`).
 - POIs are placed during the per-chunk feature pass and are **not** persistent:
-  they despawn and respawn as part of the loot and ore regeneration cycle.
+  they are erased and re-rolled by regeneration.
 - POIs are kept within their chunk so regeneration cleanly erases them.
 
-## 6. Custom structures
+## 6. POI structures
 
-Custom builds, not vanilla structures, are the content backbone. The structure
-system is a general-purpose backbone: it loads schematics, pastes them, fills
-their loot, and runs event lifecycles. Gameplay details are supplied elsewhere
-through hooks.
+POIs are small builds stored as schematics in `world/structures.json` and placed
+by `PoiService` during the feature pass. A built-in dungeon is used as a fallback
+when no POIs are registered. Large structures are **not** stored here; they are
+monuments, defined manually (section 5.1).
 
 ### 6.1 Definitions
 
 `StructureRegistry` loads `world/structures.json`. Each definition declares:
 
 - `id`, `name`, `file` (a schematic in `world/structures/`), and `category`.
-- `type` — `MONUMENT` or `POI`.
-- `biomes` — the biomes the structure belongs in.
 - `loot_table` filled into every container in the pasted bounds, and
   `loot_respawn_ticks` for Rust-like periodic refills.
 - `rotation_y`, `ignore_air`, and `copy_entities` for pasting.
-- `event_type` selecting the hooks to dispatch, and `persistent` for
-  never-auto-despawn landmarks.
-- Optional explicit `bounds`, edited through the admin book.
 
-### 6.2 Vanilla catalog
+### 6.2 Placement
 
-Minecraft's original structures are loaded by default as catalog entries (id,
-type, biomes, size hints) so the operator can place them through the plugin
-even though vanilla structure generation is disabled. They are seeded from
-`world/vanilla_structures.json` and appear in the admin book alongside custom
-schematics.
+`PoiService` rolls `small_structure.chance` per chunk, respects
+`structures.poi_cap`, and pastes a randomly chosen definition at the surface
+inside the chunk. Without WorldEdit, or with no registered schematics, it falls
+back to the built-in **vanilla-style dungeon** (a mossy cobblestone room with a
+spawner, one or two loot chests, and the occasional cobweb). Placement is part
+of the feature pass, so POIs are re-rolled whenever the chunk regenerates.
 
-### 6.3 Admin structure book
-
-The operator receives a **structure book** (also obtainable by command). Each
-entry shows the structure's type, biome, and category. Clicking an entry opens a
-**file-backed preview**: the structure is pasted into its own slot in the
-**storage and testing dimension** and the operator is teleported there. Every
-structure is backed by a schematic file.
-
-The operator edits the preview, then saves. `/structure save` (or the book's
-**Save preview** button) captures the edited region — the current WorldEdit
-selection when present, otherwise the bounds recorded when the preview opened —
-and writes it to the schematic file. Custom structures overwrite their existing
-file; a previewed vanilla structure is written to a new file and registered as a
-custom definition. `/structure cancel` (or the book's **Cancel preview** button)
-discards the preview.
-
-### 6.4 Load and paste
+### 6.3 Load and paste
 
 `StructureBridge` isolates the optional WorldEdit dependency. The WorldEdit
 bridge loads `.schem`/`.schematic` clipboards and pastes them at a location with
 optional Y rotation, returning the placed bounds. Without WorldEdit a disabled
-bridge makes spawning a safe no-op.
+bridge makes placement a safe no-op.
 
-### 6.5 Loot
+### 6.4 Loot
 
 After a paste, `StructureLoot` fills every container inside the placed bounds
 from the definition's loot table, tagging contraband exactly like wilderness
-caches. Loot can refill on a timer.
-
-### 6.6 Events
-
-`StructureService` tracks placed `StructureInstance`s in
-`world/structure_instances.json` and exposes an event lifecycle. External code
-registers a `StructureEventHook` per `event_type` and receives:
-
-- `onSpawn` — after paste and loot.
-- `onActive` — on the maintenance tick.
-- `onLoot` — when a player opens a container in the structure.
-- `shouldDespawn` — polled for non-persistent structures.
-- `onDespawn` — before blocks are cleared.
-
-The backbone owns pasting, loot, timers, persistence, and despawn; broadcasts,
-boss bars, keycards, waves, and rewards live in hooks. `/structure
-list|paste|event|remove|instances|reload` drives it for testing.
+caches.
 
 ## 7. Settlements
 
@@ -369,9 +364,7 @@ schema-tagged. The plugin's storage root is `world/`:
 - `world/settlements.json` — settlements, regions, treasuries, flags.
 - `world/plots.json` — plots, ownership, rent state.
 - `world/monuments.json` — monument registry and loot timers.
-- `world/structures.json` — custom structure definitions.
-- `world/vanilla_structures.json` — vanilla structure catalog entries.
-- `world/structure_instances.json` — placed structure instances.
+- `world/structures.json` — POI definitions.
 - `world/wilderness.json` — per-chunk indicators and pins.
 - `world/snapshots.json` — named chunk snapshots.
 - `world/state.json` — setup completion and world-generation state.
@@ -385,16 +378,13 @@ settlement) uses `Profile` metadata.
 
 - `/settlement` — list, info, spawn, claim, rent, release, plots, vendor.
 - `/plot` — info, claim, unclaim, rent, access.
-- `/worldadmin` — create (WorldEdit selection), delete, addchunk, removechunk,
-  setspawn, setrent, setperiod, setplotsize, monument, setup, pregen, reload.
+- `/worldadmin` — reload, diag, regenerate [radius], clear, hud; create,
+  delete, addchunk, removechunk, setspawn, setrent, setperiod, setplotsize;
+  monument add|remove|list; poi list|reload.
 - `/vendor` — open the system vendor.
 - `/blackmarket` — open the nearest black market (unmonitored space only).
-- `/structure` — list, paste, event, remove, instances, book, stage, bounds,
-  reload.
-- `/worldtest` — zone, chunk, indicators, force, clear, capture, simulate,
-  snapshots, admin, world, structure, diag.
 - Menus: settlement browser, plot map, plot management, rent, vendor, wanted
-  board, structure book.
+  board.
 
 Permissions follow the `world.*` convention (`world.admin`, `world.use`,
 `world.vendor`), default `op` for admin nodes.
@@ -409,81 +399,104 @@ ServerData language directory on enable. Key prefixes: `settlement.*`, `plot.*`,
 
 ## 15. Tunables
 
-`regen.max-age-seconds`, `regen.chunks-per-tick`, `regen.drop-pin-seconds`,
-`regen.evaluate-interval-seconds`, `regen.strip-ores`, `regen.vanilla-ores`,
+`regen.cycle-seconds`, `regen.cycle-jitter`, `regen.grace-seconds`,
+`regen.depletion-nodes`, `regen.chunks-per-tick`, `regen.drop-pin-seconds`,
+`regen.evaluate-interval-seconds`, `regen.dirty-inactivity-seconds`,
+`regen.budget-millis-per-tick`, `regen.player-radius-chunks`,
+`regen.strip-ores`, `regen.vanilla-ores`,
 `regen.ore-veins-per-chunk`, `regen.loot-caches-per-chunk`,
-`regen.resource-threshold`, `regen.visibility-threshold`,
-`regen.visibility-half-life-seconds`, `regen.simple-respawn-enabled`,
-`regen.simple-respawn-seconds`, `regen.simple-player-radius`,
-`visibility.player-bump`, `visibility.edit-bump`, `ore.exposure-weight`,
+`regen.fast-regen-enabled`, `regen.fast-regen-seconds`,
+`regen.verify-changes`,
+`ore.count-multiplier`,
+`ore.exposure-weight`, `worldgen.terrain.amplitude`, `worldgen.terrain.caves`,
+`worldgen.terrain.cave-scale`, `worldgen.terrain.cave-threshold`,
 `features.plants.enabled`, `features.animals.enabled`,
 `features.animals-per-chunk`, `small-structure.chance`,
-`structures.enabled`, `structures.clear-on-despawn`,
-`structures.monument-spacing-chunks`, `structures.monument-pad-radius`,
-`structures.poi-cap`, `storage.dimension`, `worldgen.rustmap.enabled`,
-`worldgen.rustmap.island-radius`, `worldgen.rustmap.sea-level`,
-`worldgen.rustmap.biomes`, `worldgen.rustmap.structure-radius`, `plot.size`,
+`structures.enabled`, `structures.poi-cap`, `storage.dimension`,
+`worldgen.island.enabled`, `worldgen.island.size`,
+`worldgen.island.coast-fraction`, `worldgen.island.ocean-margin`,
+`worldgen.island.sea-level`, `worldgen.biomes`,
+`worldgen.climate.sweep`, `worldgen.climate.scale`, `worldgen.climate.warp`,
+`worldgen.climate.octaves`,
+`pregen.radius-chunks`, `pregen.chunks-per-tick`,
+`debug.verify-regen`, `plot.size`,
 `rent.default-price`, `rent.default-period`, `economy.daily-sell-quota`,
 `police.wanted-seconds`.
 
 ## 16. World setup and diagnostics
 
-Setup is dialog-driven (section 1 of
-[generation-loop.md](generation-loop.md)). `/worldadmin setup` remains as the
-idempotent command equivalent and runs against the world implied by the command
-location:
+Setup runs **automatically when the server starts** — no administrator action or
+dialog is required. The plugin creates the managed world
+(`setup.world_name`, default `devmc`) with the configured generator and then:
 
-1. **World** — adopt `setup.world_name`, or create it with the configured
-   environment, type, seed, and structure-generation flag. A blank name uses the
-   caller's world.
-2. **Gamerules and difficulty** — apply every `setup.gamerule.<name>` value and
+1. **Gamerules and difficulty** — apply every `setup.gamerule.<name>` value and
    `setup.difficulty`.
-3. **Spawn** — set the world spawn to the caller when they are in the target
-   world.
-4. **Border** — center `setup.border_size` on the spawn when non-zero.
-5. **Settlement** — found a settlement named `setup.settlement_name` at the
+2. **Spawn** — keep the world spawn.
+3. **Border** — center `setup.border_size` on the spawn when non-zero.
+4. **Settlement** — found a settlement named `setup.settlement_name` at the
    spawn when `setup.spawn_settlement` is enabled.
-6. **Pre-generation** — generate chunks to the completed barebone state, then
-   run the feature pass, when `pregen.radius_chunks` is non-zero.
+5. **Pre-generation** — start generating chunks to the completed barebone state,
+   then run the feature pass. The radius comes from `pregen.radius_chunks`, or
+   is derived from the island/border when unset (capped at 24 chunks to bound
+   startup cost; the rest of the map generates on demand). Chunks are generated
+   asynchronously with `pregen.chunks-per-tick` kept in flight, so the heavy
+   vanilla terrain work never blocks the server.
 
-Every step reports success or failure, and re-running setup is safe.
-`/worldadmin pregen <radius|stop>` starts or stops pre-generation manually.
-
-`/worldtest` provides diagnostics and forced regeneration: `zone`, `chunk`
-(resource and visibility), `force` (regenerate the current chunk), `clear`
-(drop chunk indicators), and `diag` (backend, economy, and content counts).
+On later starts the plugin only re-adopts the managed world (Paper does not
+auto-load it) and does not repeat setup. `/worldadmin regenerate [radius]`
+regenerates the current chunk or a square of chunks (terrain reset + features),
+and `/worldadmin diag` reports backends, counts, and status, while `clear` and
+`hud` control the chunk indicators and the indicator HUD.
 
 ## 17. Storage, snapshots, and simulations
 
 A dedicated admin dimension (`storage.dimension`, default `world_admin`) is a
-flat, structure-free world used to store and inspect structure blockstates and
-to run regeneration simulations that do not depend on the live world type, which
-matters on a superflat test server. It is also the dimension the admin structure
-book teleports to for bounds editing.
+flat, structure-free world retained for regeneration simulations that do not
+depend on the live world type, which matters on a superflat test server. The
+supporting services exist but are not currently exposed by a command.
 
 - `ChunkSnapshot` captures a chunk's blockstates into a compact palette plus
   index array; `SnapshotStore` persists named snapshots in
   `world/snapshots.json`.
-- `AdminDimensionService` creates the dimension, clears a staging chunk, restores
-  snapshots, and places vanilla structures with `/place structure`.
+- `AdminDimensionService` creates the dimension, clears a staging chunk, and
+  restores snapshots.
 - `RegenerationSimulator` stages a snapshot in the staging chunk and runs the
-  real pipeline (ore stripping, ore veins, small structures, loot) for a number
-  of cycles, reporting the block-level effect. Synthetic terrain can be generated
-  so simulations work even on superflat.
-- `/worldtest` drives it: `chunk`, `capture`, `simulate`, `snapshots`, `admin`,
-  and `structure`.
+  real pipeline (ore stripping, ore veins, POIs, loot) for a number of cycles,
+  reporting the block-level effect.
 
-## 18. Rust-map world generation
+## 18. World generation
 
-When `worldgen.rustmap.enabled` is true, setup creates worlds with
-`RustMapGenerator` instead of vanilla generation:
+See [worldgen.md](worldgen.md) for the authoritative pipeline. In short, by
+default (`worldgen.island.enabled: true`) the managed world is created with
+`IslandWorldGenerator`: **vanilla terrain shaped into a bounded island**, with a
+custom biome provider.
 
-- A large radial island falling off to ocean at `island_radius`.
-- One biome per angular sector (`rustmap.biomes`), with ocean outside.
-- Terrain only: ores, decorations, and structures are disabled so the plugin's
-  own feature pass and structure system place them.
-- `RustMapPlanter` places one copy of each monument at evenly spaced anchors
-  around the island (`rustmap.structure_radius`).
+- **Vanilla terrain.** The vanilla noise, surface, and cave stages all run, so
+  hills, mountains, oceans, rivers, aquifers, and real caves are intact.
+  Decorations, structures, and mobs are disabled; the plugin's feature pass
+  places ores, plants, animals, POIs, and monuments.
+- **Bounded island.** `worldgen.island.size` is the map diameter (default 2048,
+  i.e. ~2k × 2k) and the world border is set to it. The outer
+  `worldgen.island.coast_fraction` of the radius is vertically compressed toward
+  the sea floor and flooded, leaving `worldgen.island.ocean_margin` blocks of
+  ocean inside the border. The core terrain is untouched.
+- **Guaranteed biome coverage.** `ClimateBiomeProvider` augments the vanilla
+  temperature and humidity with large-scale, domain-warped, perpendicular
+  gradients plus fractal noise. The gradients span the island, so the map
+  visits the full climate range and **every biome in `worldgen.biomes` appears
+  at least once**; because the adjusted climate is noisy, biome borders are
+  organic contours rather than straight lines. Oceans and rivers are never
+  moved.
+- **Terrain-following biomes.** Erosion is left vanilla, so mountain biomes
+  (`windswept_hills`, `stony_peaks`) only appear on real high ground; seed
+  selection requires the island to have mountains.
+- **Curated set.** The default list includes badlands and a mountain biome so
+  the gold/emerald ore filters have somewhere to apply.
+
+Setting `worldgen.island.enabled: false` restores `BareboneGenerator`: vanilla
+terrain shape and biomes with no features. Regeneration restores the same
+terrain either way. Monuments are defined manually by administrators in both
+modes.
 
 ## 19. MVP, deferred work, and risks
 
@@ -493,9 +506,9 @@ Core model, persistence, zones, settlement selection commands, boundary HUD;
 per-chunk wilderness indicators, barebone regeneration, ore veins, plants,
 animals, small POIs, death-drop pinning; sub-chunk plots, protection,
 rent/expiry/claim, menus; buy-only vendor with quotas and contraband tagging;
-zone PvP guard, wanted model, and `PoliceService` stub; custom structure loading,
-pasting, loot filling, event hooks, admin structure book, and vanilla catalog;
-dialog-driven setup; localization; unit tests.
+zone PvP guard, wanted model, and `PoliceService` stub; POI schematic loading,
+pasting, and loot filling; manually defined monuments; automatic world setup;
+localization; unit tests.
 
 ### Deferred
 
@@ -506,8 +519,10 @@ seasons/wipes.
 
 ### Risks
 
-- **Regeneration cost.** Budgeted queue and dirty-only resets are mandatory; a
-  bad config must not stall the server.
+- **Regeneration cost.** Addressed by a bulk WorldEdit terrain copy, persistent
+  scratch chunks, redundant-strip skipping, and a per-tick wall-clock budget.
+  The queue remains bounded by `regen.chunks-per-tick`; a bad config still must
+  not stall the server.
 - **Inflation.** Buy-only plus quotas mitigates but does not remove it; monitor
   sell volume before tuning prices.
 - **PvP farming of pinned chunks.** A player could pin a chunk by dying
@@ -519,5 +534,16 @@ seasons/wipes.
   the recorded bounds.
 - **Untrusted schematics.** The registry confines file paths to
   `world/structures/`; only administrators should write files there.
-- **Monument pad edits.** Flattening a pad must not spill outside the recorded
-  footprint; the pad radius bounds it.
+- **Regeneration seed.** Regeneration copies terrain from a same-seed scratch
+  world, so it always matches the world seed. Neither Paper's `regenerateChunk`
+  (stubbed out) nor WorldEdit's `regenerate` (wrong seed on Paper 26.1+) may be
+  used.
+
+## 20. World map (planned)
+
+A future feature will render a browsable map of the managed world (terrain,
+settlements, monuments, and POIs). The data is already available: `ChunkKey`
+indexes land, `SettlementManager` holds settlement chunks, `MonumentManager`
+holds monument bounds, and `ChunkIndicators` tracks per-chunk resource and
+visibility. The plan is to expose a `/worldmap` command and a menu that render a
+colour-coded top-down view (and a web/PNG export later). Not implemented yet.

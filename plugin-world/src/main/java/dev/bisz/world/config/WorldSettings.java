@@ -15,24 +15,22 @@ public final class WorldSettings {
   /** ServerData-relative settings document. */
   public static final String FILE = "world/settings.json";
 
-  private final long regenMaxAgeMillis;
+  private final long regenCycleMillis;
+  private final double regenCycleJitter;
+  private final long regenGraceMillis;
+  private final int regenDepletionNodes;
   private final int regenChunksPerTick;
   private final long regenDropPinMillis;
   private final long regenEvaluateIntervalMillis;
+  private final long regenDirtyInactivityMillis;
+  private final long regenBudgetMillisPerTick;
   private final boolean regenStripOres;
   private final int oreVeinsPerChunk;
   private final int lootCachesPerChunk;
-  private final double resourceThreshold;
-  private final double visibilityThreshold;
-  private final long visibilityHalfLifeMillis;
-  private final double visibilityPlayerBump;
-  private final double visibilityEditBump;
   private final double smallStructureChance;
   private final boolean structuresEnabled;
-  private final boolean structuresClearOnDespawn;
-  private final int monumentSpacingChunks;
-  private final int monumentPadRadius;
   private final int poiCap;
+  private final int regenPlayerRadiusChunks;
   private final long rentDefaultPrice;
   private final long rentDefaultPeriodMillis;
   private final int plotSize;
@@ -51,25 +49,53 @@ public final class WorldSettings {
   private final Map<String, String> setupGamerules;
   private final int pregenRadiusChunks;
   private final int pregenChunksPerTick;
-  private final boolean simpleRespawnEnabled;
-  private final long simpleRespawnMillis;
-  private final int simplePlayerRadius;
-  private final List<String> simpleMaterials;
+  private final boolean fastRegenEnabled;
+  private final long fastRegenMillis;
+  private final boolean regenVerifyChanges;
   private final boolean vanillaOres;
+  private final double oreCountMultiplier;
   private final double oreExposureWeight;
+  private final double terrainAmplitude;
+  private final boolean terrainCaves;
+  private final double terrainCaveScale;
+  private final double terrainCaveThreshold;
   private final boolean plantsEnabled;
   private final boolean animalsEnabled;
   private final int animalsPerChunk;
   private final String storageDimension;
-  private final boolean rustMapEnabled;
-  private final int rustMapIslandRadius;
-  private final int rustMapSeaLevel;
-  private final List<String> rustMapBiomes;
-  private final int rustMapStructureRadius;
+  private final boolean debugVerifyRegen;
+  private final boolean islandEnabled;
+  private final int islandSize;
+  private final double islandCoastFraction;
+  private final int islandOceanMargin;
+  private final int islandSeaLevel;
+  private final List<String> worldBiomes;
+  private final double climateSweep;
+  private final double climateScale;
+  private final double climateWarp;
+  private final int climateOctaves;
 
   private WorldSettings(Map<String, Object> values) {
-    this.regenMaxAgeMillis =
-      Json.longValue(values, "regen.max_age_seconds", 7200L) * 1000L;
+    this.regenCycleMillis =
+      Math.max(
+        1L,
+        Json.longValue(values, "regen.cycle_seconds", 3600L)
+      ) *
+      1000L;
+    this.regenCycleJitter = Math.max(
+      0.0,
+      Json.decimal(values, "regen.cycle_jitter", 0.1)
+    );
+    this.regenGraceMillis =
+      Math.max(
+        0L,
+        Json.longValue(values, "regen.grace_seconds", 60L)
+      ) *
+      1000L;
+    this.regenDepletionNodes = Math.max(
+      1,
+      Json.integer(values, "regen.depletion_nodes", 48)
+    );
     this.regenChunksPerTick = Math.max(
       1,
       Json.integer(values, "regen.chunks_per_tick", 2)
@@ -78,6 +104,16 @@ public final class WorldSettings {
       Json.longValue(values, "regen.drop_pin_seconds", 600L) * 1000L;
     this.regenEvaluateIntervalMillis =
       Json.longValue(values, "regen.evaluate_interval_seconds", 5L) * 1000L;
+    this.regenDirtyInactivityMillis =
+      Math.max(
+        0L,
+        Json.longValue(values, "regen.dirty_inactivity_seconds", 60L)
+      ) *
+      1000L;
+    this.regenBudgetMillisPerTick = Math.max(
+      1L,
+      Json.longValue(values, "regen.budget_millis_per_tick", 25L)
+    );
     this.regenStripOres = Json.bool(values, "regen.strip_ores", true);
     this.oreVeinsPerChunk = Math.max(
       0,
@@ -87,52 +123,17 @@ public final class WorldSettings {
       0,
       Json.integer(values, "regen.loot_caches_per_chunk", 1)
     );
-    this.resourceThreshold = Json.decimal(
-      values,
-      "regen.resource_threshold",
-      0.35
-    );
-    this.visibilityThreshold = Json.decimal(
-      values,
-      "regen.visibility_threshold",
-      0.2
-    );
-    this.visibilityHalfLifeMillis =
-      Math.max(
-        1L,
-        Json.longValue(values, "regen.visibility_half_life_seconds", 1800L)
-      ) *
-      1000L;
-    this.visibilityPlayerBump = Json.decimal(
-      values,
-      "visibility.player_bump",
-      0.5
-    );
-    this.visibilityEditBump = Json.decimal(
-      values,
-      "visibility.edit_bump",
-      0.25
-    );
     this.smallStructureChance = Json.decimal(
       values,
       "small_structure.chance",
       0.15
     );
     this.structuresEnabled = Json.bool(values, "structures.enabled", true);
-    this.structuresClearOnDespawn = Json.bool(
-      values,
-      "structures.clear_on_despawn",
-      true
-    );
-    this.monumentSpacingChunks = Math.max(
-      1,
-      Json.integer(values, "structures.monument_spacing_chunks", 24)
-    );
-    this.monumentPadRadius = Math.max(
-      0,
-      Json.integer(values, "structures.monument_pad_radius", 2)
-    );
     this.poiCap = Math.max(0, Json.integer(values, "structures.poi_cap", 64));
+    this.regenPlayerRadiusChunks = Math.max(
+      0,
+      Json.integer(values, "regen.player_radius_chunks", 4)
+    );
     this.rentDefaultPrice = Math.max(
       0L,
       Json.longValue(values, "rent.default_price", 500L)
@@ -151,7 +152,7 @@ public final class WorldSettings {
       Json.longValue(values, "police.wanted_seconds", 600L) * 1000L
     );
     this.managedWorlds = Json.stringList(values, "worlds");
-    this.setupWorldName = Json.string(values, "setup.world_name", "");
+    this.setupWorldName = Json.string(values, "setup.world_name", "devmc");
     this.setupEnvironment = Json.string(values, "setup.environment", "NORMAL");
     this.setupWorldType = Json.string(values, "setup.world_type", "NORMAL");
     this.setupSeed = Json.string(values, "setup.seed", "");
@@ -181,35 +182,49 @@ public final class WorldSettings {
     );
     this.pregenChunksPerTick = Math.max(
       1,
-      Json.integer(values, "pregen.chunks_per_tick", 20)
+      Json.integer(values, "pregen.chunks_per_tick", 2)
     );
-    this.simpleRespawnEnabled = Json.bool(
+    this.fastRegenEnabled = Json.bool(
       values,
-      "regen.simple_respawn_enabled",
+      "regen.fast_regen_enabled",
       true
     );
-    this.simpleRespawnMillis =
+    this.fastRegenMillis =
       Math.max(
-        1L,
-        Json.longValue(values, "regen.simple_respawn_seconds", 30L)
+        0L,
+        Json.longValue(values, "regen.fast_regen_seconds", 30L)
       ) *
       1000L;
-    this.simplePlayerRadius = Math.max(
-      0,
-      Json.integer(values, "regen.simple_player_radius", 8)
-    );
-    List<String> configuredMaterials = Json.stringList(
+    this.regenVerifyChanges = Json.bool(
       values,
-      "regen.simple_materials"
+      "regen.verify_changes",
+      true
     );
-    this.simpleMaterials = configuredMaterials.isEmpty()
-      ? DEFAULT_SIMPLE_MATERIALS
-      : configuredMaterials;
     this.vanillaOres = Json.bool(values, "regen.vanilla_ores", false);
+    this.oreCountMultiplier = Json.decimal(
+      values,
+      "ore.count_multiplier",
+      1.0
+    );
     this.oreExposureWeight = Json.decimal(
       values,
       "ore.exposure_weight",
-      0.7
+      0.25
+    );
+    this.terrainAmplitude = Math.max(
+      1.0,
+      Json.decimal(values, "worldgen.terrain.amplitude", 1.15)
+    );
+    this.terrainCaves = Json.bool(values, "worldgen.terrain.caves", true);
+    this.terrainCaveScale = Json.decimal(
+      values,
+      "worldgen.terrain.cave_scale",
+      0.06
+    );
+    this.terrainCaveThreshold = Json.decimal(
+      values,
+      "worldgen.terrain.cave_threshold",
+      0.62
     );
     this.plantsEnabled = Json.bool(values, "features.plants.enabled", true);
     this.animalsEnabled = Json.bool(values, "features.animals.enabled", true);
@@ -222,65 +237,72 @@ public final class WorldSettings {
       "storage.dimension",
       "world_admin"
     );
-    this.rustMapEnabled = Json.bool(
+    this.debugVerifyRegen = Json.bool(
       values,
-      "worldgen.rustmap.enabled",
-      true
+      "debug.verify_regen",
+      false
     );
-    this.rustMapIslandRadius = Math.max(
-      64,
-      Json.integer(values, "worldgen.rustmap.island_radius", 1500)
+    this.islandEnabled = Json.bool(values, "worldgen.island.enabled", true);
+    this.islandSize = Math.max(
+      256,
+      Json.integer(values, "worldgen.island.size", 2048)
     );
-    this.rustMapSeaLevel = Json.integer(
+    this.islandCoastFraction = Json.decimal(
       values,
-      "worldgen.rustmap.sea_level",
-      62
+      "worldgen.island.coast_fraction",
+      0.15
     );
-    List<String> configuredBiomes = Json.stringList(
+    this.islandOceanMargin = Math.max(
+      0,
+      Json.integer(values, "worldgen.island.ocean_margin", 96)
+    );
+    this.islandSeaLevel = Json.integer(
       values,
-      "worldgen.rustmap.biomes"
+      "worldgen.island.sea_level",
+      63
     );
-    this.rustMapBiomes = configuredBiomes.isEmpty()
-      ? DEFAULT_RUSTMAP_BIOMES
+    List<String> configuredBiomes = Json.stringList(values, "worldgen.biomes");
+    this.worldBiomes = configuredBiomes.isEmpty()
+      ? DEFAULT_WORLD_BIOMES
       : configuredBiomes;
-    this.rustMapStructureRadius = Math.max(
-      64,
-      Json.integer(values, "worldgen.rustmap.structure_radius", 1100)
+    this.climateSweep = Json.decimal(
+      values,
+      "worldgen.climate.sweep",
+      0.6
+    );
+    this.climateScale = Json.decimal(
+      values,
+      "worldgen.climate.scale",
+      0.0016
+    );
+    this.climateWarp = Json.decimal(
+      values,
+      "worldgen.climate.warp",
+      120.0
+    );
+    this.climateOctaves = Math.max(
+      1,
+      Json.integer(values, "worldgen.climate.octaves", 4)
     );
   }
 
-  /** Basic blocks restored quickly before the slower ore cycle. */
-  private static final List<String> DEFAULT_SIMPLE_MATERIALS = List.of(
-    "stone",
-    "deepslate",
-    "dirt",
-    "grass_block",
-    "sand",
-    "red_sand",
-    "gravel",
-    "clay",
-    "sandstone",
-    "tuff",
-    "andesite",
-    "diorite",
-    "granite",
-    "calcite",
-    "netherrack",
-    "end_stone",
-    "snow_block",
-    "obsidian"
-  );
-
-  /** One biome per angular sector of the rust-map island. */
-  private static final List<String> DEFAULT_RUSTMAP_BIOMES = List.of(
+  /**
+   * Biomes the island generator guarantees. Badlands and a mountain biome are
+   * required so the gold and emerald ore filters have somewhere to apply.
+   */
+  private static final List<String> DEFAULT_WORLD_BIOMES = List.of(
     "plains",
     "forest",
+    "birch_forest",
+    "taiga",
+    "snowy_plains",
     "desert",
     "savanna",
-    "taiga",
     "jungle",
     "swamp",
-    "snowy_plains"
+    "badlands",
+    "windswept_hills",
+    "stony_peaks"
   );
 
   /** Installs defaults into ServerData and loads the settings document. */
@@ -308,8 +330,24 @@ public final class WorldSettings {
     return new WorldSettings(values);
   }
 
-  public long regenMaxAgeMillis() {
-    return regenMaxAgeMillis;
+  /** How long after being farmed a chunk waits before it may reset. */
+  public long regenCycleMillis() {
+    return regenCycleMillis;
+  }
+
+  /** Deterministic per-chunk jitter as a fraction of the cycle. */
+  public double regenCycleJitter() {
+    return regenCycleJitter;
+  }
+
+  /** How long after the last presence/edit a scheduled reset must wait. */
+  public long regenGraceMillis() {
+    return regenGraceMillis;
+  }
+
+  /** Resource nodes extracted before a chunk is scheduled for a reset. */
+  public int regenDepletionNodes() {
+    return regenDepletionNodes;
   }
 
   public int regenChunksPerTick() {
@@ -324,6 +362,16 @@ public final class WorldSettings {
     return regenEvaluateIntervalMillis;
   }
 
+  /** How long a dirty chunk must be idle before it is reset. */
+  public long regenDirtyInactivityMillis() {
+    return regenDirtyInactivityMillis;
+  }
+
+  /** Wall-clock budget for regeneration work per server tick. */
+  public long regenBudgetMillisPerTick() {
+    return regenBudgetMillisPerTick;
+  }
+
   public boolean stripOres() {
     return regenStripOres;
   }
@@ -336,28 +384,6 @@ public final class WorldSettings {
     return lootCachesPerChunk;
   }
 
-  /** Resource fraction at or below which a chunk is considered depleted. */
-  public double resourceThreshold() {
-    return resourceThreshold;
-  }
-
-  /** Visibility at or below which a region is considered idle. */
-  public double visibilityThreshold() {
-    return visibilityThreshold;
-  }
-
-  public long visibilityHalfLifeMillis() {
-    return visibilityHalfLifeMillis;
-  }
-
-  public double visibilityPlayerBump() {
-    return visibilityPlayerBump;
-  }
-
-  public double visibilityEditBump() {
-    return visibilityEditBump;
-  }
-
   /** Chance per chunk that a destructible small structure is placed. */
   public double smallStructureChance() {
     return smallStructureChance;
@@ -368,24 +394,14 @@ public final class WorldSettings {
     return structuresEnabled;
   }
 
-  /** Whether despawned structures have their blocks cleared. */
-  public boolean structuresClearOnDespawn() {
-    return structuresClearOnDespawn;
-  }
-
-  /** Minimum spacing between monuments, in chunks. */
-  public int monumentSpacingChunks() {
-    return monumentSpacingChunks;
-  }
-
-  /** Radius cleared/flattened around a monument footprint. */
-  public int monumentPadRadius() {
-    return monumentPadRadius;
-  }
-
   /** Maximum number of live POI structures. */
   public int poiCap() {
     return poiCap;
+  }
+
+  /** Chunks around a chunk that must be free of players before it regenerates. */
+  public int regenPlayerRadiusChunks() {
+    return regenPlayerRadiusChunks;
   }
 
   public long rentDefaultPrice() {
@@ -471,23 +487,19 @@ public final class WorldSettings {
     return pregenChunksPerTick;
   }
 
-  /** Whether basic blocks are quickly restored after being mined. */
-  public boolean simpleRespawnEnabled() {
-    return simpleRespawnEnabled;
+  /** Whether the fast terrain-fill pass runs on dirty chunks. */
+  public boolean fastRegenEnabled() {
+    return fastRegenEnabled;
   }
 
-  public long simpleRespawnMillis() {
-    return simpleRespawnMillis;
+  /** How long after a change the fast terrain-fill pass may run. */
+  public long fastRegenMillis() {
+    return fastRegenMillis;
   }
 
-  /** Blocks a player must be clear of for a simple block to respawn. */
-  public int simplePlayerRadius() {
-    return simplePlayerRadius;
-  }
-
-  /** Lower-case material names handled by the quick respawn layer. */
-  public List<String> simpleMaterials() {
-    return simpleMaterials;
+  /** Whether unload-time terrain sampling backstops the change events. */
+  public boolean regenVerifyChanges() {
+    return regenVerifyChanges;
   }
 
   /** Whether vanilla ore generation is expected; false means we strip it. */
@@ -495,9 +507,34 @@ public final class WorldSettings {
     return vanillaOres;
   }
 
-  /** Probability that an ore vein must be air-exposed; fewer buried veins. */
+  /** Multiplier applied to vanilla ore vein counts; slightly more ore. */
+  public double oreCountMultiplier() {
+    return oreCountMultiplier;
+  }
+
+  /** Probability of skipping a vein that is not exposed to air. */
   public double oreExposureWeight() {
     return oreExposureWeight;
+  }
+
+  /** Vertical terrain scale above sea level (1.0 = vanilla). */
+  public double terrainAmplitude() {
+    return terrainAmplitude;
+  }
+
+  /** Whether extra caves are carved on top of vanilla caves. */
+  public boolean terrainCaves() {
+    return terrainCaves;
+  }
+
+  /** Noise frequency for the extra cave carver. */
+  public double terrainCaveScale() {
+    return terrainCaveScale;
+  }
+
+  /** Noise threshold for the extra cave carver; higher = fewer caves. */
+  public double terrainCaveThreshold() {
+    return terrainCaveThreshold;
   }
 
   /** Whether biome vegetation is generated as a feature. */
@@ -520,25 +557,57 @@ public final class WorldSettings {
     return storageDimension;
   }
 
-  public boolean rustMapEnabled() {
-    return rustMapEnabled;
+  /** Whether the one-shot regeneration self-test runs at startup. */
+  public boolean debugVerifyRegen() {
+    return debugVerifyRegen;
   }
 
-  public int rustMapIslandRadius() {
-    return rustMapIslandRadius;
+  /** Whether the managed world uses the island generator. */
+  public boolean islandEnabled() {
+    return islandEnabled;
   }
 
-  public int rustMapSeaLevel() {
-    return rustMapSeaLevel;
+  /** The map diameter in blocks; the island radius is half of this. */
+  public int islandSize() {
+    return islandSize;
   }
 
-  /** Biomes assigned one per angular sector of the island. */
-  public List<String> rustMapBiomes() {
-    return rustMapBiomes;
+  /** Fraction of the island radius used for the coastal compression band. */
+  public double islandCoastFraction() {
+    return islandCoastFraction;
   }
 
-  /** Radius at which the single copy of each structure is anchored. */
-  public int rustMapStructureRadius() {
-    return rustMapStructureRadius;
+  /** Ocean blocks kept between the coast and the world border. */
+  public int islandOceanMargin() {
+    return islandOceanMargin;
+  }
+
+  public int islandSeaLevel() {
+    return islandSeaLevel;
+  }
+
+  /** Biomes the island generator guarantees to place. */
+  public List<String> worldBiomes() {
+    return worldBiomes;
+  }
+
+  /** Climate sweep amplitude: how far the map spans the climate range. */
+  public double climateSweep() {
+    return climateSweep;
+  }
+
+  /** Base frequency of the climate fractal noise (smaller = larger biomes). */
+  public double climateScale() {
+    return climateScale;
+  }
+
+  /** Domain warp strength applied before sampling the climate, in blocks. */
+  public double climateWarp() {
+    return climateWarp;
+  }
+
+  /** Number of fractal octaves in the climate field. */
+  public int climateOctaves() {
+    return climateOctaves;
   }
 }

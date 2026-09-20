@@ -4,22 +4,22 @@ import dev.bisz.bundler.JSON;
 import dev.bisz.world.settlement.SettlementManager;
 import dev.bisz.world.commands.WorldAdminCommand;
 import dev.bisz.world.commands.SettlementCommand;
-import dev.bisz.world.commands.WorldTestCommand;
-import dev.bisz.world.commands.StructureCommand;
 import dev.bisz.world.commands.VendorCommand;
+import dev.bisz.world.commands.WorldInfoCommand;
 import dev.bisz.world.config.WorldSettings;
 import dev.bisz.world.economy.PriceTable;
-import dev.bisz.world.feature.FeatureGenerator;
 import dev.bisz.world.economy.SystemVendor;
+import dev.bisz.world.feature.FeatureGenerator;
 import dev.bisz.world.integration.CurrencyGateway;
 import dev.bisz.world.integration.SelectionBridge;
 import dev.bisz.world.integration.SelectionBridges;
+import dev.bisz.world.listener.IndicatorHud;
 import dev.bisz.world.listener.ProtectionListener;
 import dev.bisz.world.listener.PvpListener;
-import dev.bisz.world.listener.IndicatorHud;
 import dev.bisz.world.listener.RentScheduler;
-import dev.bisz.world.listener.StructureListener;
+import dev.bisz.world.listener.WildernessIntegrityListener;
 import dev.bisz.world.listener.WildernessListener;
+import dev.bisz.world.listener.WorldJoinListener;
 import dev.bisz.world.listener.ZoneListener;
 import dev.bisz.world.loot.LootTables;
 import dev.bisz.world.plot.PlotManager;
@@ -27,37 +27,35 @@ import dev.bisz.world.plot.ProtectionService;
 import dev.bisz.world.police.PoliceService;
 import dev.bisz.world.police.SearchService;
 import dev.bisz.world.police.WantedService;
-import dev.bisz.world.setup.ChunkPregenerator;
-import dev.bisz.world.setup.SetupDialogs;
-import dev.bisz.world.setup.SetupListener;
+import dev.bisz.world.setup.AreaRegenerator;
 import dev.bisz.world.setup.SetupService;
 import dev.bisz.world.setup.SetupState;
 import dev.bisz.world.sim.AdminDimensionService;
+import dev.bisz.world.sim.RegenSelfTest;
 import dev.bisz.world.sim.RegenerationSimulator;
 import dev.bisz.world.snapshot.SnapshotStore;
-import dev.bisz.world.structure.StructurePlacer;
-import dev.bisz.world.structure.StructurePreviewService;
-import dev.bisz.world.structure.StructureService;
-import dev.bisz.world.structure.VanillaStructureCatalog;
+import dev.bisz.world.structure.PoiService;
+import dev.bisz.world.wilderness.ChunkIndicators;
 import dev.bisz.world.wilderness.ChunkRegenerator;
-import dev.bisz.world.wilderness.DirtyChunkTracker;
 import dev.bisz.world.wilderness.LootReseeder;
 import dev.bisz.world.wilderness.MonumentManager;
 import dev.bisz.world.wilderness.OreReseeder;
 import dev.bisz.world.wilderness.RegenerationScheduler;
 import dev.bisz.world.wilderness.Regenerators;
-import dev.bisz.world.wilderness.ChunkIndicators;
-import dev.bisz.world.wilderness.SimpleResourceRegenerator;
 import dev.bisz.world.wilderness.SmallStructures;
+import dev.bisz.world.worldgen.BareboneGenerator;
+import dev.bisz.world.worldgen.WorldGenerators;
 import dev.bisz.commands.CommandRegistery;
 import dev.bisz.players.locales.Locale;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
+import org.bukkit.World;
 import org.bukkit.event.Listener;
+import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Lifecycle entry point for the settlement plugin. */
+/** Lifecycle entry point for the world plugin. */
 public final class WorldPlugin extends JavaPlugin {
 
   private static WorldPlugin instance;
@@ -72,26 +70,20 @@ public final class WorldPlugin extends JavaPlugin {
   private SystemVendor vendor;
   private LootTables lootTables;
   private MonumentManager monuments;
-  private StructureService structures;
-  private VanillaStructureCatalog vanillaStructures;
-  private StructurePlacer structurePlacer;
-  private StructurePreviewService previews;
+  private PoiService pois;
   private WantedService police;
   private SearchService search;
-  private DirtyChunkTracker tracker;
   private ChunkRegenerator regenerator;
   private ChunkIndicators indicators;
   private RegenerationScheduler regenerationScheduler;
   private RentScheduler rentScheduler;
-  private ChunkPregenerator pregenerator;
+  private AreaRegenerator areaRegenerator;
   private SetupService setup;
   private SetupState setupState;
-  private SetupDialogs setupDialogs;
   private OreReseeder oreReseeder;
   private SmallStructures smallStructures;
   private LootReseeder lootReseeder;
   private FeatureGenerator features;
-  private SimpleResourceRegenerator simpleResources;
   private AdminDimensionService adminDimension;
   private SnapshotStore snapshots;
   private RegenerationSimulator simulator;
@@ -99,7 +91,7 @@ public final class WorldPlugin extends JavaPlugin {
 
   /** Returns the loaded plugin instance. */
   public static WorldPlugin instance() {
-    return Objects.requireNonNull(instance, "Settlement plugin is not loaded");
+    return Objects.requireNonNull(instance, "World plugin is not loaded");
   }
 
   @Override
@@ -120,34 +112,24 @@ public final class WorldPlugin extends JavaPlugin {
       this.lootTables = LootTables.load(this);
       this.monuments = new MonumentManager(this, lootTables);
       this.monuments.load();
-      this.structures = new StructureService(this, settings, lootTables);
-      this.structures.load();
-      this.vanillaStructures = new VanillaStructureCatalog(this);
-      this.vanillaStructures.load();
-      this.structurePlacer = new StructurePlacer(
-        settings,
-        structures,
-        monuments
-      );
-      this.previews = new StructurePreviewService(this);
-      this.pregenerator = new ChunkPregenerator(this, settings);
+      this.smallStructures = new SmallStructures(lootTables);
+      this.pois = new PoiService(this, settings, lootTables, smallStructures);
+      this.pois.load();
+      this.areaRegenerator = new AreaRegenerator(this);
       this.setup = new SetupService(this);
       this.setupState = new SetupState(this);
       this.setupState.load();
-      this.setupDialogs = new SetupDialogs(this, setupState);
       this.police = new WantedService(settings);
       this.search = new SearchService();
-      this.tracker = new DirtyChunkTracker();
       this.regenerator = Regenerators.create(this);
       this.indicators = new ChunkIndicators(this);
       this.indicators.load();
       this.oreReseeder = new OreReseeder(settings);
       this.lootReseeder = new LootReseeder(settings, lootTables);
-      this.smallStructures = new SmallStructures(settings, lootTables);
       this.features = new FeatureGenerator(
         settings,
         oreReseeder,
-        smallStructures,
+        pois,
         lootReseeder
       );
       this.regenerationScheduler = new RegenerationScheduler(
@@ -157,12 +139,9 @@ public final class WorldPlugin extends JavaPlugin {
         regenerator,
         features,
         settlements,
-        monuments,
-        tracker
+        monuments
       );
       this.regenerationScheduler.start();
-      this.simpleResources = new SimpleResourceRegenerator(this, settings);
-      this.simpleResources.start();
       this.adminDimension = new AdminDimensionService(this, settings);
       this.snapshots = new SnapshotStore(this);
       this.snapshots.load();
@@ -179,6 +158,10 @@ public final class WorldPlugin extends JavaPlugin {
       this.indicatorHud.start();
       registerListeners();
       registerCommands();
+      autoSetup();
+      if (settings.debugVerifyRegen()) {
+        new RegenSelfTest(this).schedule(4, 4);
+      }
       getLogger()
         .info(
           "World enabled with " +
@@ -188,22 +171,77 @@ public final class WorldPlugin extends JavaPlugin {
           " monuments."
         );
     } catch (RuntimeException exception) {
-      getLogger().severe("Settlement could not start: " + exception.getMessage());
+      getLogger().severe("World could not start: " + exception.getMessage());
       getServer().getPluginManager().disablePlugin(this);
     }
+  }
+
+  /**
+   * Creates and generates the managed world on startup, with no administrator
+   * action. Re-runs automatically if the world was removed.
+   */
+  private void autoSetup() {
+    try {
+      if (setupState.complete()) {
+        // Paper does not auto-load the custom world on restart; adopt it.
+        World world = setup.ensureWorld();
+        // Re-apply gamerules/difficulty every start so config changes (for
+        // example mobGriefing) reach an already-created world.
+        setup.applyWorldRules(world);
+        return;
+      }
+      SetupService.Report report = setup.run();
+      for (SetupService.Step step : report.steps()) {
+        getLogger().info(
+          "setup " + step.name() + ": " + step.detail()
+        );
+      }
+      if (report.success()) {
+        setupState.markComplete(setup.managedWorldName());
+      } else {
+        getLogger()
+          .warning(
+            "World setup did not fully succeed; it will be retried on next start."
+          );
+      }
+    } catch (RuntimeException exception) {
+      getLogger()
+        .warning("Automatic world setup failed: " + exception.getMessage());
+    }
+  }
+
+  /**
+   * Generator used when the server loads the managed world from disk (via the
+   * {@code worlds: <name>: generator: world} entry in bukkit.yml). This keeps
+   * vanilla-terrain, feature-free generation applied across restarts.
+   */
+  @Override
+  public ChunkGenerator getDefaultWorldGenerator(String worldName, String id) {
+    WorldSettings current = this.settings;
+    if (current == null) {
+      getLogger().info("Using BareboneGenerator for world " + worldName + ".");
+      return new BareboneGenerator();
+    }
+    getLogger()
+      .info(
+        "Using " +
+        (current.islandEnabled() ? "IslandWorldGenerator" : "BareboneGenerator") +
+        " for world " +
+        worldName +
+        "."
+      );
+    return WorldGenerators.create(current);
   }
 
   @Override
   public void onDisable() {
     if (regenerationScheduler != null) regenerationScheduler.stop();
     if (rentScheduler != null) rentScheduler.stop();
-    if (pregenerator != null) pregenerator.stop();
-    if (simpleResources != null) simpleResources.stop();
+    if (areaRegenerator != null) areaRegenerator.stop();
     if (indicatorHud != null) indicatorHud.stop();
     if (settlements != null) settlements.save();
     if (plots != null) plots.save();
     if (monuments != null) monuments.save();
-    if (structures != null) structures.save();
     if (indicators != null) indicators.save();
     if (snapshots != null) snapshots.save();
     CommandRegistery.unregisterAll(this);
@@ -214,10 +252,10 @@ public final class WorldPlugin extends JavaPlugin {
     for (Listener listener : new Listener[] {
       new ProtectionListener(this),
       new WildernessListener(this),
+      new WildernessIntegrityListener(this),
       new PvpListener(this),
       new ZoneListener(this),
-      new SetupListener(this),
-      new StructureListener(this),
+      new WorldJoinListener(this),
       indicatorHud,
     }) {
       getServer().getPluginManager().registerEvents(listener, this);
@@ -228,8 +266,7 @@ public final class WorldPlugin extends JavaPlugin {
     CommandRegistery.register(this, new SettlementCommand(this));
     CommandRegistery.register(this, new WorldAdminCommand(this));
     CommandRegistery.register(this, new VendorCommand(this));
-    CommandRegistery.register(this, new StructureCommand(this));
-    CommandRegistery.register(this, new WorldTestCommand(this));
+    CommandRegistery.register(this, new WorldInfoCommand(this));
   }
 
   private void installLocaleDefaults() {
@@ -240,7 +277,7 @@ public final class WorldPlugin extends JavaPlugin {
         JSON.mergeMissingDefaults(resource, input);
       } catch (IOException exception) {
         throw new IllegalStateException(
-          "Cannot install bundled settlement locale file " + resource,
+          "Cannot install bundled world locale file " + resource,
           exception
         );
       }
@@ -248,7 +285,7 @@ public final class WorldPlugin extends JavaPlugin {
     Locale.reload();
   }
 
-  /** Reloads persisted settlements, plots, monuments, and region indicators. */
+  /** Reloads persisted settlements, plots, monuments, and chunk indicators. */
   public void reloadData() {
     settlements.load();
     plots.load();
@@ -296,28 +333,16 @@ public final class WorldPlugin extends JavaPlugin {
     return monuments;
   }
 
-  public StructureService structures() {
-    return structures;
-  }
-
-  public VanillaStructureCatalog vanillaStructures() {
-    return vanillaStructures;
-  }
-
-  public StructurePlacer structurePlacer() {
-    return structurePlacer;
-  }
-
-  public StructurePreviewService previews() {
-    return previews;
+  public PoiService pois() {
+    return pois;
   }
 
   public ChunkRegenerator regenerator() {
     return regenerator;
   }
 
-  public ChunkPregenerator pregenerator() {
-    return pregenerator;
+  public AreaRegenerator areaRegenerator() {
+    return areaRegenerator;
   }
 
   public SetupService setup() {
@@ -326,10 +351,6 @@ public final class WorldPlugin extends JavaPlugin {
 
   public SetupState setupState() {
     return setupState;
-  }
-
-  public SetupDialogs setupDialogs() {
-    return setupDialogs;
   }
 
   public FeatureGenerator features() {
@@ -344,20 +365,12 @@ public final class WorldPlugin extends JavaPlugin {
     return search;
   }
 
-  public DirtyChunkTracker tracker() {
-    return tracker;
-  }
-
   public ChunkIndicators indicators() {
     return indicators;
   }
 
   public RegenerationScheduler regenerationScheduler() {
     return regenerationScheduler;
-  }
-
-  public SimpleResourceRegenerator simpleResources() {
-    return simpleResources;
   }
 
   public AdminDimensionService adminDimension() {

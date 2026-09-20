@@ -8,60 +8,122 @@ import org.junit.jupiter.api.Test;
 
 class RegenerationPolicyTest {
 
-  private static final double RESOURCE_THRESHOLD = 0.35;
-  private static final double VISIBILITY_THRESHOLD = 0.2;
-  private static final long MAX_AGE = 10_000L;
+  private static final long DEPLETION_NODES = 48L;
+  private static final long DIRTY_INACTIVITY = 60_000L;
+  private static final long GRACE = 100L;
 
   private ChunkState state() {
     return new ChunkState(new ChunkKey("world", 0, 0), 0L);
   }
 
-  private boolean decide(ChunkState state, long now) {
-    return RegenerationPolicy.evaluate(
-      state,
-      now,
-      RESOURCE_THRESHOLD,
-      VISIBILITY_THRESHOLD,
-      MAX_AGE
-    ).regenerate();
+  @Test
+  void untouchedChunkIsNeverScheduled() {
+    assertFalse(
+      RegenerationPolicy.shouldSchedule(
+        state(),
+        1_000L,
+        DEPLETION_NODES,
+        DIRTY_INACTIVITY
+      )
+    );
   }
 
   @Test
-  void depletedAndIdleChunkRegenerates() {
+  void enoughExtractionSchedules() {
     ChunkState state = state();
-    state.markRegenerated(0L, 10);
-    state.depleteNodes(8);
-    assertTrue(decide(state, 1_000L));
+    state.depleteNodes((int) DEPLETION_NODES);
+    assertTrue(
+      RegenerationPolicy.shouldSchedule(
+        state,
+        1_000L,
+        DEPLETION_NODES,
+        DIRTY_INACTIVITY
+      )
+    );
   }
 
   @Test
-  void visibleChunkIsNotRegeneratedEvenWhenDepleted() {
+  void idleEditsSchedule() {
     ChunkState state = state();
-    state.markRegenerated(0L, 10);
-    state.depleteNodes(8);
-    state.bumpVisibility(0.9, 1_000L);
-    assertFalse(decide(state, 1_000L));
+    state.markEdit(0L);
+    assertFalse(
+      RegenerationPolicy.shouldSchedule(
+        state,
+        1_000L,
+        DEPLETION_NODES,
+        DIRTY_INACTIVITY
+      )
+    );
+    assertTrue(
+      RegenerationPolicy.shouldSchedule(
+        state,
+        DIRTY_INACTIVITY + 1L,
+        DEPLETION_NODES,
+        DIRTY_INACTIVITY
+      )
+    );
   }
 
   @Test
-  void richIdleYoungChunkIsNotRegenerated() {
+  void alreadyScheduledChunkIsNotRescheduled() {
     ChunkState state = state();
-    state.markRegenerated(0L, 10);
-    assertFalse(decide(state, 1_000L));
+    state.schedule(5_000L);
+    assertFalse(
+      RegenerationPolicy.shouldSchedule(
+        state,
+        1_000L,
+        DEPLETION_NODES,
+        DIRTY_INACTIVITY
+      )
+    );
   }
 
   @Test
-  void overAgeChunkRegeneratesEvenWhenRich() {
+  void fastRegenRequiresChangeIdleUnoccupiedAndUnpinned() {
     ChunkState state = state();
-    state.markRegenerated(0L, 10);
-    assertTrue(decide(state, MAX_AGE + 1L));
+    state.markEdit(1_000L);
+    assertFalse(RegenerationPolicy.shouldFastRegen(state, 1_200L, false, 500L));
+    assertTrue(RegenerationPolicy.shouldFastRegen(state, 2_000L, false, 0L));
+    assertFalse(RegenerationPolicy.shouldFastRegen(state, 2_000L, true, 0L));
+    state.pin(3_000L);
+    assertFalse(RegenerationPolicy.shouldFastRegen(state, 2_000L, false, 0L));
   }
 
   @Test
-  void overAgeChunkStaysWhenVisible() {
+  void fastRegenDoesNotRerunWithoutNewChanges() {
     ChunkState state = state();
-    state.markRegenerated(0L, 10);
-    state.bumpVisibility(0.9, MAX_AGE + 1L);
-    assertFalse(decide(state, MAX_AGE + 1L));
+    state.markEdit(1_000L);
+    state.markFastRegen(2_000L);
+    assertFalse(RegenerationPolicy.shouldFastRegen(state, 5_000L, false, 0L));
+    state.markEdit(3_000L);
+    assertTrue(RegenerationPolicy.shouldFastRegen(state, 5_000L, false, 0L));
+  }
+
+  @Test
+  void regeneratedChunkIsCleanAndNotEligibleForFastRegen() {
+    ChunkState state = state();
+    state.markEdit(1_000L);
+    assertTrue(RegenerationPolicy.shouldFastRegen(state, 2_000L, false, 0L));
+    state.markRegenerated(2_000L, 50);
+    assertFalse(state.dirty());
+    assertFalse(state.isScheduled());
+    assertFalse(RegenerationPolicy.shouldFastRegen(state, 3_000L, false, 0L));
+  }
+
+  @Test
+  void resetRequiresDueIdleUnpinnedAndPastGrace() {
+    ChunkState state = state();
+    state.schedule(1_000L);
+    assertTrue(RegenerationPolicy.evaluate(state, 2_000L, false, GRACE).reset());
+
+    assertFalse(RegenerationPolicy.evaluate(state, 2_000L, true, GRACE).reset());
+    assertFalse(RegenerationPolicy.evaluate(state, 500L, false, GRACE).reset());
+
+    state.markPresence(1_950L);
+    assertFalse(RegenerationPolicy.evaluate(state, 2_000L, false, GRACE).reset());
+
+    state.markPresence(0L);
+    state.pin(3_000L);
+    assertFalse(RegenerationPolicy.evaluate(state, 2_000L, false, GRACE).reset());
   }
 }

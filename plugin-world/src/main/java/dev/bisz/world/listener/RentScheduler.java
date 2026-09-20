@@ -47,7 +47,6 @@ public final class RentScheduler {
     }
     plugin.plots().expireDue(now);
     plugin.monuments().tick(now);
-    plugin.structures().tick(now);
     plugin.police().prune();
   }
 }

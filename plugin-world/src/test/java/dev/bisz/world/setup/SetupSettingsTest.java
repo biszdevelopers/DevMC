@@ -32,7 +32,7 @@ class SetupSettingsTest {
   @Test
   void setupDefaultsAreSane() {
     WorldSettings settings = WorldSettings.from(new HashMap<>());
-    assertEquals("", settings.setupWorldName());
+    assertEquals("devmc", settings.setupWorldName());
     assertEquals("NORMAL", settings.setupEnvironment());
     assertTrue(settings.setupSpawnSettlement());
     assertTrue(settings.setupGamerules().isEmpty());

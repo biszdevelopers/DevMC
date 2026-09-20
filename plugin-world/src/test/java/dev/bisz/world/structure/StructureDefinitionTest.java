@@ -15,16 +15,12 @@ class StructureDefinitionTest {
       "supply_drop",
       "Supply Drop",
       "supply_drop.schem",
-      "event",
-      StructureType.POI,
-      java.util.List.of("plains"),
+      "poi",
       "tier2",
       1200L,
       90,
       true,
-      true,
-      "supply_drop",
-      false
+      true
     );
   }
 
@@ -42,16 +38,12 @@ class StructureDefinitionTest {
       "a",
       "A",
       "a.schem",
-      "event",
-      null,
-      null,
+      "poi",
       null,
       0L,
       -90,
       false,
-      true,
-      null,
-      false
+      true
     );
     assertEquals(270, def.rotationY());
   }
@@ -62,16 +54,12 @@ class StructureDefinitionTest {
       "a",
       "A",
       "a.schem",
-      "event",
-      null,
-      null,
+      "poi",
       null,
       -5L,
       0,
       false,
-      true,
-      null,
-      false
+      true
     );
     assertEquals(0L, def.lootRespawnTicks());
   }
@@ -87,17 +75,16 @@ class StructureDefinitionTest {
   }
 
   @Test
-  void nullCategoryDefaultsToEvent() {
+  void nullCategoryDefaultsToPoi() {
     Map<String, Object> map = new HashMap<>(definition().toMap());
     map.put("category", null);
-    assertEquals("event", StructureDefinition.fromMap(map).category());
+    assertEquals("poi", StructureDefinition.fromMap(map).category());
   }
 
   @Test
   void definitionMapContainsExpectedKeys() {
     Map<String, Object> map = definition().toMap();
     assertTrue(map.containsKey("loot_table"));
-    assertTrue(map.containsKey("event_type"));
-    assertTrue(map.containsKey("persistent"));
+    assertTrue(map.containsKey("copy_entities"));
   }
 }

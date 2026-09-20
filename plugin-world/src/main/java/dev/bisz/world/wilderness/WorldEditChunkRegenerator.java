@@ -1,24 +1,39 @@
 package dev.bisz.world.wilderness;
 
+import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.MaxChangedBlocksException;
 import com.sk89q.worldedit.WorldEdit;
+import com.sk89q.worldedit.WorldEditException;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
+import com.sk89q.worldedit.function.operation.ForwardExtentCopy;
+import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.function.pattern.BlockPattern;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.regions.Region;
-import com.sk89q.worldedit.world.RegenOptions;
 import com.sk89q.worldedit.world.block.BaseBlock;
 import com.sk89q.worldedit.world.block.BlockType;
 import com.sk89q.worldedit.world.block.BlockTypes;
+import dev.bisz.world.WorldPlugin;
+import dev.bisz.world.config.WorldSettings;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.bukkit.World;
 
-/** Regenerates chunks through WorldEdit, preserving the world seed. */
+/**
+ * Regenerates chunks from a same-seed scratch world using WorldEdit's bulk
+ * extent copy, and strips natural ores through WorldEdit.
+ */
 public final class WorldEditChunkRegenerator implements ChunkRegenerator {
+
+  private final WorldPlugin plugin;
+
+  public WorldEditChunkRegenerator(WorldPlugin plugin, WorldSettings settings) {
+    this.plugin = Objects.requireNonNull(plugin, "plugin");
+    Objects.requireNonNull(settings, "settings");
+  }
 
   private static final List<BlockType> STONE_ORES = List.of(
     BlockTypes.COAL_ORE,
@@ -48,21 +63,60 @@ public final class WorldEditChunkRegenerator implements ChunkRegenerator {
     BlockTypes.ANCIENT_DEBRIS
   );
 
+  /**
+   * Overwrites the whole chunk with the scratch terrain in a single bulk
+   * WorldEdit operation. This replaces the old per-block capture/compare loop,
+   * which was the dominant cost of regeneration.
+   */
   @Override
   public boolean regenerate(World world, int chunkX, int chunkZ) {
     Objects.requireNonNull(world, "world");
-    com.sk89q.worldedit.world.World weWorld = BukkitAdapter.adapt(world);
-    com.sk89q.worldedit.EditSession session =
-      WorldEdit.getInstance().newEditSession(weWorld);
+    World scratch = ScratchRegenerator.scratchWorld(plugin, world);
+    if (scratch == null) return false;
+    world.getChunkAt(chunkX, chunkZ);
+    scratch.getChunkAt(chunkX, chunkZ);
+    int baseX = chunkX << 4;
+    int baseZ = chunkZ << 4;
+    int minY = world.getMinHeight();
+    int maxY = world.getMaxHeight() - 1;
+    com.sk89q.worldedit.world.World weSource = BukkitAdapter.adapt(scratch);
+    com.sk89q.worldedit.world.World weTarget = BukkitAdapter.adapt(world);
+    Region region = new CuboidRegion(
+      weSource,
+      BlockVector3.at(baseX, minY, baseZ),
+      BlockVector3.at(baseX + 15, maxY, baseZ + 15)
+    );
+    EditSession session = WorldEdit.getInstance()
+      .newEditSessionBuilder()
+      .world(weTarget)
+      .maxBlocks(-1)
+      .build();
     try {
-      RegenOptions options = RegenOptions.builder().build();
-      return weWorld.regenerate(
-        chunkRegion(weWorld, chunkX, chunkZ),
+      ForwardExtentCopy operation = new ForwardExtentCopy(
+        weSource,
+        region,
         session,
-        options
+        BlockVector3.at(baseX, minY, baseZ)
       );
+      operation.setCopyingEntities(false);
+      operation.setCopyingBiomes(false);
+      Operations.complete(operation);
+      return true;
+    } catch (WorldEditException exception) {
+      plugin
+        .getLogger()
+        .warning(
+          "Terrain restore failed for " +
+          chunkX +
+          "," +
+          chunkZ +
+          ": " +
+          exception.getMessage()
+        );
+      return false;
     } finally {
       session.close();
+      scratch.unloadChunk(chunkX, chunkZ, true);
     }
   }
 
@@ -126,6 +180,6 @@ public final class WorldEditChunkRegenerator implements ChunkRegenerator {
 
   @Override
   public String name() {
-    return "WorldEdit";
+    return "Paper+WorldEdit";
   }
 }

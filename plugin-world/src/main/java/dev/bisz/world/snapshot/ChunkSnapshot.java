@@ -55,13 +55,20 @@ public final class ChunkSnapshot {
     int low = Math.max(minY, chunk.getWorld().getMinHeight());
     int high = Math.min(maxY, chunk.getWorld().getMaxHeight() - 1);
     int sizeY = high - low + 1;
+    // The native snapshot reads straight from the chunk's section arrays; the
+    // old per-block chunk.getBlock() path was the dominant regeneration cost.
+    org.bukkit.ChunkSnapshot nativeSnapshot = chunk.getChunkSnapshot(
+      true,
+      false,
+      false
+    );
     List<String> palette = new ArrayList<>();
     Map<String, Integer> lookup = new HashMap<>();
     int[] indices = new int[SIZE * SIZE * sizeY];
     for (int x = 0; x < SIZE; x++) {
       for (int z = 0; z < SIZE; z++) {
         for (int y = low; y <= high; y++) {
-          String key = chunk.getBlock(x, y, z).getBlockData().getAsString();
+          String key = nativeSnapshot.getBlockData(x, y, z).getAsString();
           int index = lookup.computeIfAbsent(key, ignored -> {
             palette.add(key);
             return palette.size() - 1;

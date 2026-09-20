@@ -84,9 +84,14 @@ public final class IndicatorHud implements Listener {
     String resource = state == null
       ? "--"
       : String.format(java.util.Locale.ROOT, "%.2f", state.resource());
-    String visibility = state == null
-      ? "--"
-      : String.format(java.util.Locale.ROOT, "%.2f", state.visibility());
+    String regen;
+    if (state == null || !state.isScheduled()) {
+      regen = "--";
+    } else {
+      regen = formatDuration(
+        Math.max(0L, state.dueAt() - System.currentTimeMillis())
+      );
+    }
 
     String text =
       "§7" +
@@ -97,8 +102,8 @@ public final class IndicatorHud implements Listener {
       chunk.z() +
       " §8| §ares " +
       resource +
-      " §8| §evis " +
-      visibility;
+      " §8| §eregen " +
+      regen;
 
     player
       .spigot()
@@ -106,5 +111,12 @@ public final class IndicatorHud implements Listener {
         ChatMessageType.ACTION_BAR,
         TextComponent.fromLegacyText(text)
       );
+  }
+
+  private static String formatDuration(long millis) {
+    long minutes = millis / 60_000L;
+    if (minutes <= 0L) return (millis / 1000L) + "s";
+    if (minutes < 60L) return minutes + "m";
+    return (minutes / 60L) + "h" + (minutes % 60L) + "m";
   }
 }

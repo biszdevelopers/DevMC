@@ -1,6 +1,7 @@
 package dev.bisz.world.wilderness;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.bisz.world.model.ChunkKey;
@@ -13,68 +14,86 @@ class ChunkStateTest {
   }
 
   @Test
-  void freshChunkIsFullyResourced() {
-    assertEquals(1.0, state().resource(), 1.0E-9);
-  }
-
-  @Test
-  void depletionLowersResourceFraction() {
+  void freshChunkIsFullyResourcedAndUnscheduled() {
     ChunkState state = state();
-    state.markRegenerated(0L, 10);
-    state.depleteNodes(4);
-    assertEquals(0.6, state.resource(), 1.0E-9);
-    state.depleteNodes(100);
-    assertEquals(0.0, state.resource(), 1.0E-9);
-  }
-
-  @Test
-  void visibilityDecaysByHalfLife() {
-    ChunkState state = state();
-    state.bumpVisibility(1.0, 0L);
-    state.decayVisibility(1_000L, 1_000L);
-    assertEquals(0.5, state.visibility(), 1.0E-9);
-    state.decayVisibility(2_000L, 1_000L);
-    assertEquals(0.25, state.visibility(), 1.0E-9);
-  }
-
-  @Test
-  void visibilityIsCappedAtOne() {
-    ChunkState state = state();
-    state.bumpVisibility(0.8, 0L);
-    state.bumpVisibility(0.8, 0L);
-    assertEquals(1.0, state.visibility(), 1.0E-9);
-  }
-
-  @Test
-  void markRegeneratedResetsIndicators() {
-    ChunkState state = state();
-    state.bumpVisibility(1.0, 0L);
-    state.markRegenerated(500L, 12);
-    assertEquals(0.0, state.visibility(), 1.0E-9);
-    assertEquals(12, state.baselineNodes());
-    assertEquals(12, state.remainingNodes());
     assertEquals(1.0, state.resource(), 1.0E-9);
-    assertEquals(500L, state.lastRegenAt());
+    assertFalse(state.isScheduled());
+  }
+
+  @Test
+  void extractionIsCounted() {
+    ChunkState state = state();
+    state.ensureBaseline(100);
+    state.depleteNodes(30);
+    assertEquals(30, state.extractedNodes());
+    assertEquals(70, state.remainingNodes());
+    assertEquals(0.7, state.resource(), 1.0E-9);
+  }
+
+  @Test
+  void scheduleKeepsTheEarliestTime() {
+    ChunkState state = state();
+    state.schedule(1_000L);
+    state.schedule(500L);
+    assertEquals(1_000L, state.dueAt());
+    state.schedule(2_000L);
+    assertEquals(1_000L, state.dueAt());
+  }
+
+  @Test
+  void dueThenResetClearsEverything() {
+    ChunkState state = state();
+    state.schedule(1_000L);
+    assertFalse(state.isDue(999L));
+    assertTrue(state.isDue(1_000L));
+    state.markRegenerated(2_000L, 50);
+    assertFalse(state.isScheduled());
+    assertEquals(0, state.extractedNodes());
+    assertEquals(50, state.baselineNodes());
+    assertEquals(2_000L, state.lastRegenAt());
+    assertEquals(2_000L, state.lastFastRegenAt());
+    assertFalse(state.dirty());
+  }
+
+  @Test
+  void settlingWindowFollowsRegeneration() {
+    ChunkState state = state();
+    state.markRegenerated(1_000L, 10);
+    assertTrue(state.isSettling(1_500L));
+    assertFalse(state.isSettling(4_500L));
+  }
+
+  @Test
+  void presenceEditAndPinAreRecorded() {
+    ChunkState state = state();
+    state.markPresence(123L);
+    assertEquals(123L, state.lastPresenceAt());
+    state.markEdit(456L);
+    assertTrue(state.dirty());
+    assertEquals(456L, state.lastEditAt());
+    assertEquals(456L, state.lastActivityAt());
+    state.pin(5_000L);
+    assertTrue(state.isPinned(4_000L));
+    assertFalse(state.isPinned(5_000L));
   }
 
   @Test
   void stateRoundTripsThroughMap() {
     ChunkState state = state();
-    state.markRegenerated(100L, 20);
-    state.depleteNodes(5);
-    state.bumpVisibility(0.7, 200L);
+    state.ensureBaseline(80);
+    state.depleteNodes(10);
+    state.markEdit(1_000L);
+    state.markFastRegen(1_500L);
+    state.schedule(2_000L);
+    state.pin(3_000L);
     ChunkState restored = ChunkState.fromMap(state.toMap());
     assertEquals(state.key(), restored.key());
-    assertEquals(state.visibility(), restored.visibility(), 1.0E-9);
     assertEquals(state.baselineNodes(), restored.baselineNodes());
-    assertEquals(state.remainingNodes(), restored.remainingNodes());
-    assertEquals(state.lastRegenAt(), restored.lastRegenAt());
-  }
-
-  @Test
-  void depletedChunkWithoutBaselineStaysRich() {
-    ChunkState state = state();
-    state.depleteNodes(5);
-    assertTrue(state.resource() >= 1.0);
+    assertEquals(state.extractedNodes(), restored.extractedNodes());
+    assertEquals(state.dueAt(), restored.dueAt());
+    assertEquals(state.lastEditAt(), restored.lastEditAt());
+    assertEquals(state.lastFastRegenAt(), restored.lastFastRegenAt());
+    assertEquals(state.dirty(), restored.dirty());
+    assertEquals(state.pinnedUntil(), restored.pinnedUntil());
   }
 }

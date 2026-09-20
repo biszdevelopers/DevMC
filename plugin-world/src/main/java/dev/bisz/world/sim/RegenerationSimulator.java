@@ -92,7 +92,7 @@ public final class RegenerationSimulator {
       Random random = new Random(seed + cycle * 7919L);
       regenerator.stripOres(world, chunkX, chunkZ);
       ores.reseed(world, chunkX, chunkZ, random);
-      smallStructures.reseed(world, chunkX, chunkZ, random);
+      smallStructures.place(world, chunkX, chunkZ, random);
       loot.reseed(world, chunkX, chunkZ, random);
       notes.add("Cycle " + cycle + " applied.");
     }

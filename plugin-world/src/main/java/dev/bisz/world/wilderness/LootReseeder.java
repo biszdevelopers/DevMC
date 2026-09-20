@@ -27,21 +27,26 @@ public final class LootReseeder {
     this.tables = Objects.requireNonNull(tables, "tables");
   }
 
-  /** Places and fills this chunk's loot caches. */
-  public void reseed(World world, int chunkX, int chunkZ, Random random) {
+  /**
+   * Places and fills this chunk's loot caches.
+   *
+   * @return the number of caches placed, used as part of the resource baseline
+   */
+  public int reseed(World world, int chunkX, int chunkZ, Random random) {
     Objects.requireNonNull(world, "world");
     Objects.requireNonNull(random, "random");
     LootTable table = tables.get(WILDERNESS_TABLE);
-    if (table == null) return;
+    if (table == null) return 0;
     int caches = settings.lootCachesPerChunk();
-    if (caches <= 0) return;
+    if (caches <= 0) return 0;
     int minX = chunkX << 4;
     int minZ = chunkZ << 4;
     int worldMin = world.getMinHeight();
     int worldMax = world.getMaxHeight() - 1;
     int low = Math.max(worldMin + 5, 5);
     int high = Math.min(worldMax - 1, 48);
-    if (high <= low) return;
+    if (high <= low) return 0;
+    int placed = 0;
     for (int cache = 0; cache < caches; cache++) {
       int x = minX + random.nextInt(16);
       int z = minZ + random.nextInt(16);
@@ -54,7 +59,9 @@ public final class LootReseeder {
         fill(chest.getInventory(), table, random);
         chest.update(true, false);
       }
+      placed++;
     }
+    return placed;
   }
 
   /** Fills an inventory with a table's rolls, tagging contraband. */

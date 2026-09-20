@@ -6,7 +6,9 @@ import org.bukkit.World;
 public interface ChunkRegenerator {
 
   /**
-   * Regenerates a chunk from the world seed.
+   * Regenerates a chunk from the world seed, restoring the exact barebone
+   * terrain. Feature blocks (ores, plants, POIs, loot) are removed and must be
+   * re-applied by the caller.
    *
    * @return true when the chunk was regenerated.
    */

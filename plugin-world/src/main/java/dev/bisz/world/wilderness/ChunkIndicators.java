@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Persisted resource and visibility indicators for every tracked chunk. */
+/** Persisted regeneration state for every tracked chunk. */
 public final class ChunkIndicators {
 
   /** ServerData-relative wilderness indicator document. */
@@ -48,7 +48,7 @@ public final class ChunkIndicators {
     List<Map<String, Object>> encoded = new ArrayList<>();
     for (ChunkState state : states.values()) encoded.add(state.toMap());
     Map<String, Object> document = new LinkedHashMap<>();
-    document.put("schema", 2);
+    document.put("schema", 3);
     document.put("chunks", encoded);
     JSON.saveDataFromDataBase(FILE, document);
   }
