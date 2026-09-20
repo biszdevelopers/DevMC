@@ -1,0 +1,20 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "cases": [
+      {
+        "when": "nether_star",
+        "model": {
+          "type": "minecraft:model",
+          "model": "diamond_star:item/diamond_nether_star"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:item/diamond"
+    }
+  }
+}

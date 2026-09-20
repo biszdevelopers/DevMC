@@ -12,6 +12,8 @@ import org.bukkit.plugin.Plugin;
 
 /** Floating, per-entity deduplicated damage numbers. */
 public final class DamageIndicator {
+  private static final int ANIMATION_TICKS = 20;
+  private static final double RISE_DISTANCE = 2D;
   private static boolean enabled = true;
   private static final Map<UUID, TextDisplay> active = new HashMap<>();
 
@@ -42,24 +44,17 @@ public final class DamageIndicator {
       entity.setSeeThrough(true);
       entity.setShadowed(false);
       entity.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+      entity.setTeleportDuration(ANIMATION_TICKS);
     });
     active.put(targetId, display);
 
-    int[] ticks = {0};
-    plugin.getServer().getScheduler().runTaskTimer(plugin, task -> {
-      ticks[0]++;
-      if (!display.isValid()) {
-        active.remove(targetId);
-        task.cancel();
-        return;
-      }
-      display.teleport(display.getLocation().add(0, 0.1, 0));
-      if (ticks[0] >= 20) {
-        active.remove(targetId);
-        display.remove();
-        task.cancel();
-      }
-    }, 0L, 1L);
+    // One destination update is enough: the client interpolates the display
+    // over its full one-second lifetime instead of receiving 20 teleports.
+    display.teleport(location.clone().add(0, RISE_DISTANCE, 0));
+    plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+      active.remove(targetId, display);
+      if (display.isValid()) display.remove();
+    }, ANIMATION_TICKS);
   }
 
   static String format(double damage) {
