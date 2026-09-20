@@ -11,8 +11,9 @@ Runtime config lives under the server's ServerData directory:
 Y:\Games\Minecraft\devServer\ServerData\<plugin>\...
 ```
 
-For the world plugin that is `ServerData\world\settings.json`, plus data files
-(`settlements.json`, `plots.json`, `monuments.json`, `wilderness.json`, ...).
+For the worldgen plugin that is `ServerData\worldgen\settings.json`, plus data
+files (`wilderness.json`, `state.json`, `snapshots.json`, `structures.json`,
+`loot.json`).
 
 ## Behaviour you must know
 
@@ -25,8 +26,8 @@ For the world plugin that is `ServerData\world\settings.json`, plus data files
   existing server file.
 - **To adopt a new default**, either edit the value in `ServerData\...` directly,
   or delete the file and restart (it is recreated from the bundled defaults).
-- **`/worldadmin reload` reloads data, not settings.** It re-reads settlements,
-  plots, monuments, and chunk indicators; it does not re-read `settings.json`.
+- **`/worldadmin reload` reloads data, not settings.** It re-reads chunk
+  indicators and POI definitions; it does not re-read `settings.json`.
 
 ## Changing a setting
 
@@ -34,7 +35,7 @@ For the world plugin that is `ServerData\world\settings.json`, plus data files
 2. `restart` the server (or `rebuild` if the plugin also changed).
 3. Verify with a diagnostic, e.g. `worldinfo regenstatus` or `/worldadmin diag`.
 
-## Common knobs (world plugin)
+## Common knobs (worldgen plugin)
 
 - `regen.cycle_seconds`, `regen.depletion_nodes`, `regen.grace_seconds` —
   regeneration timing and trigger.

@@ -1,0 +1,6 @@
+{
+  "worldgen.command.player_only": "§c该命令仅限玩家使用。",
+  "worldgen.command.unknown": "§c未知子命令: %s",
+  "worldgen.command.usage": "§c用法: %s",
+  "worldgen.reload": "§a世界数据已重新加载。"
+}

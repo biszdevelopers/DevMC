@@ -23,6 +23,6 @@
     <module>plugin-enchants</module>
     <module>plugin-combat</module>
     <module>plugin-smp</module>
-    <module>plugin-world</module>
+    <module>plugin-worldgen</module>
   </modules>
 </project>

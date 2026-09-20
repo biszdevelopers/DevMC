@@ -9,7 +9,7 @@
 #   .\build-all.ps1                      # build + tests, deploy the runnable set
 #   .\build-all.ps1 -SkipTests           # faster: build without running tests
 #   .\build-all.ps1 -Clean               # mvn clean install each plugin
-#   .\build-all.ps1 -Only plugin-world   # build just one plugin
+#   .\build-all.ps1 -Only plugin-worldgen   # build just one plugin
 #   .\build-all.ps1 -Exclude @()         # include combat and SMP
 #   .\build-all.ps1 -PluginsDir "D:\server\plugins"
 [CmdletBinding()]
@@ -34,7 +34,7 @@ $order = @(
   'plugin-enchants',
   'plugin-combat',
   'plugin-smp',
-  'plugin-world'
+  'plugin-worldgen'
 )
 
 if (-not (Test-Path -LiteralPath $PluginsDir)) {

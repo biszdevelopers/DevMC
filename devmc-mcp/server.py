@@ -270,7 +270,7 @@ def _find_jar(cfg, module):
 
 def _rebuild(cfg, module, clean, skip_tests, timeout):
     if not module:
-        return "rebuild needs a module, e.g. plugin-world"
+        return "rebuild needs a module, e.g. plugin-worldgen"
     build = _build(cfg, module, clean, skip_tests, None, True)
     if "BUILD SUCCESS" not in build:
         return "build failed; not deploying or restarting\n" + build
@@ -479,7 +479,7 @@ def tool_specs():
                 "properties": {
                     "module": {
                         "type": "string",
-                        "description": "Plugin directory, e.g. plugin-world, or 'all'.",
+                        "description": "Plugin directory, e.g. plugin-worldgen, or 'all'.",
                     },
                     "clean": {"type": "boolean", "default": False},
                     "skip_tests": {"type": "boolean", "default": True},

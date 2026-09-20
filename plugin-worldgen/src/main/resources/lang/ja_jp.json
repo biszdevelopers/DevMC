@@ -1,0 +1,6 @@
+{
+  "worldgen.command.player_only": "§cPlayers only.",
+  "worldgen.command.unknown": "§cUnknown subcommand: %s",
+  "worldgen.command.usage": "§cUsage: %s",
+  "worldgen.reload": "§aWorld data reloaded."
+}
