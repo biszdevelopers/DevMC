@@ -1,0 +1,69 @@
+{
+  "tables": [
+    {
+      "id": "wilderness",
+      "rolls": 2,
+      "entries": [
+        { "item": "iron_ingot", "min": 1, "max": 3, "weight": 20, "contraband": false },
+        { "item": "coal", "min": 2, "max": 6, "weight": 24, "contraband": false },
+        { "item": "copper_ingot", "min": 2, "max": 5, "weight": 20, "contraband": false },
+        { "item": "redstone", "min": 2, "max": 6, "weight": 14, "contraband": false },
+        { "item": "gold_ingot", "min": 1, "max": 2, "weight": 10, "contraband": false },
+        { "item": "lapis_lazuli", "min": 1, "max": 4, "weight": 8, "contraband": false },
+        { "item": "emerald", "min": 1, "max": 1, "weight": 3, "contraband": false },
+        { "item": "gunpowder", "min": 2, "max": 5, "weight": 8, "contraband": true }
+      ]
+    },
+    {
+      "id": "tier1",
+      "rolls": 2,
+      "entries": [
+        { "item": "iron_ingot", "min": 2, "max": 6, "weight": 22, "contraband": false },
+        { "item": "gold_ingot", "min": 1, "max": 4, "weight": 16, "contraband": false },
+        { "item": "lapis_lazuli", "min": 2, "max": 8, "weight": 12, "contraband": false },
+        { "item": "emerald", "min": 1, "max": 3, "weight": 10, "contraband": false },
+        { "item": "golden_apple", "min": 1, "max": 1, "weight": 8, "contraband": false },
+        { "item": "gunpowder", "min": 3, "max": 8, "weight": 10, "contraband": true },
+        { "item": "tnt", "min": 1, "max": 2, "weight": 5, "contraband": true }
+      ]
+    },
+    {
+      "id": "tier2",
+      "rolls": 3,
+      "entries": [
+        { "item": "diamond", "min": 1, "max": 3, "weight": 16, "contraband": false },
+        { "item": "emerald", "min": 2, "max": 6, "weight": 14, "contraband": false },
+        { "item": "golden_apple", "min": 1, "max": 2, "weight": 12, "contraband": false },
+        { "item": "ender_pearl", "min": 1, "max": 3, "weight": 12, "contraband": false },
+        { "item": "blaze_rod", "min": 1, "max": 4, "weight": 10, "contraband": false },
+        { "item": "tnt", "min": 2, "max": 4, "weight": 8, "contraband": true },
+        { "item": "gunpowder", "min": 4, "max": 10, "weight": 8, "contraband": true }
+      ]
+    },
+    {
+      "id": "tier3",
+      "rolls": 4,
+      "entries": [
+        { "item": "diamond", "min": 2, "max": 5, "weight": 18, "contraband": false },
+        { "item": "netherite_scrap", "min": 1, "max": 2, "weight": 10, "contraband": false },
+        { "item": "golden_apple", "min": 1, "max": 3, "weight": 12, "contraband": false },
+        { "item": "ender_pearl", "min": 2, "max": 5, "weight": 12, "contraband": false },
+        { "item": "nether_star", "min": 1, "max": 1, "weight": 2, "contraband": false },
+        { "item": "tnt", "min": 3, "max": 6, "weight": 10, "contraband": true },
+        { "item": "gunpowder", "min": 6, "max": 14, "weight": 8, "contraband": true }
+      ]
+    },
+    {
+      "id": "tier4",
+      "rolls": 5,
+      "entries": [
+        { "item": "netherite_scrap", "min": 1, "max": 3, "weight": 16, "contraband": false },
+        { "item": "diamond", "min": 3, "max": 8, "weight": 16, "contraband": false },
+        { "item": "nether_star", "min": 1, "max": 1, "weight": 4, "contraband": false },
+        { "item": "ancient_debris", "min": 1, "max": 2, "weight": 8, "contraband": false },
+        { "item": "tnt", "min": 4, "max": 8, "weight": 12, "contraband": true },
+        { "item": "gunpowder", "min": 8, "max": 20, "weight": 10, "contraband": true }
+      ]
+    }
+  ]
+}

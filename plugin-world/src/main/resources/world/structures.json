@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "structures": [
+    {
+      "id": "supply_drop",
+      "name": "Supply Drop",
+      "file": "supply_drop.schem",
+      "category": "poi",
+      "loot_table": "tier2",
+      "loot_respawn_ticks": 0,
+      "rotation_y": 0,
+      "ignore_air": true,
+      "copy_entities": true
+    }
+  ]
+}
